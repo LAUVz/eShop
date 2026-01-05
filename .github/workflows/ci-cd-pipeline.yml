@@ -40,11 +40,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - run: dotnet workload restore
+      - run: dotnet restore eShop.Web.slnf
 
-      - run: dotnet restore
-
-      - run: dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=true
+      - run: dotnet build eShop.Web.slnf --no-restore -c Release /p:TreatWarningsAsErrors=true
 
       - uses: aquasecurity/trivy-action@master
         continue-on-error: true
@@ -76,13 +74,11 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - run: dotnet workload restore
+      - run: dotnet restore eShop.Web.slnf
 
-      - run: dotnet restore
+      - run: dotnet build eShop.Web.slnf --no-restore -c Release
 
-      - run: dotnet build --no-restore -c Release
-
-      - run: dotnet test --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - run: dotnet test eShop.Web.slnf --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
 
       - uses: codecov/codecov-action@v4
         with:
@@ -227,8 +223,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - run: dotnet workload restore
 
       - env:
           TEST_BASE_URL: ${{ needs.deploy-dev.outputs.alb-url }}
