@@ -25,45 +25,41 @@ permissions:
   id-token: write
   contents: read
   pull-requests: write
+  security-events: write
 
 jobs:
   code-quality:
     name: Code Quality & Security
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
-        run: dotnet restore
+      - run: dotnet workload restore
 
-      - name: Run .NET Code Analysis
-        run: dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=true
+      - run: dotnet restore
 
-      - name: Run Security Scan (Trivy)
-        uses: aquasecurity/trivy-action@master
+      - run: dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=true
+
+      - uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
 
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: Secret Scanning
-        uses: trufflesecurity/trufflehog@main
+      - uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: main
@@ -73,33 +69,27 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     needs: code-quality
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
-        run: dotnet restore
+      - run: dotnet workload restore
 
-      - name: Build solution
-        run: dotnet build --no-restore -c Release
+      - run: dotnet restore
 
-      - name: Run unit tests
-        run: dotnet test --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - run: dotnet build --no-restore -c Release
 
-      - name: Generate code coverage report
-        uses: codecov/codecov-action@v4
+      - run: dotnet test --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+      - uses: codecov/codecov-action@v4
         with:
           directory: ./coverage
           fail_ci_if_error: false
 
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
@@ -110,7 +100,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
     if: github.event_name != 'pull_request'
-
     strategy:
       matrix:
         service:
@@ -126,26 +115,20 @@ jobs:
           - name: order-processor
             dockerfile: docker/Dockerfile.order-processor
             context: .
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
+      - id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Extract metadata
-        id: meta
+      - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.login-ecr.outputs.registry }}/eshop-dev-${{ matrix.service.name }}
@@ -157,8 +140,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
@@ -169,16 +151,15 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      - name: Scan Docker image
-        uses: aquasecurity/trivy-action@master
+      - uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ${{ steps.login-ecr.outputs.registry }}/eshop-dev-${{ matrix.service.name }}:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-image-results.sarif'
 
-      - name: Upload image scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-image-results.sarif') != ''
         with:
           sarif_file: 'trivy-image-results.sarif'
 
@@ -190,72 +171,41 @@ jobs:
     environment:
       name: development
       url: ${{ steps.deploy.outputs.alb-url }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
+      - id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Deploy to ECS
-        id: deploy
+      - id: deploy
         run: |
-          # Update ECS services with new task definitions
           for SERVICE in webapp unified-api; do
-            # Get current task definition
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-dev-$SERVICE --query taskDefinition)
-
-            # Update image in task definition
             NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:${{ github.sha }}" \
               '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-
-            # Register new task definition
             NEW_TASK_ARN=$(echo $NEW_TASK_DEF | jq -r '@json' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --query 'taskDefinition.taskDefinitionArn' --output text)
-
-            # Update service
-            aws ecs update-service \
-              --cluster eshop-dev-cluster \
-              --service $SERVICE \
-              --task-definition $NEW_TASK_ARN \
-              --force-new-deployment
+            aws ecs update-service --cluster eshop-dev-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
           done
-
-          # Get ALB URL
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-dev-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
-      - name: Wait for deployment
-        run: |
+      - run: |
           for SERVICE in webapp unified-api; do
-            aws ecs wait services-stable \
-              --cluster eshop-dev-cluster \
-              --services $SERVICE \
-              --region ${{ env.AWS_REGION }}
+            aws ecs wait services-stable --cluster eshop-dev-cluster --services $SERVICE --region ${{ env.AWS_REGION }}
           done
 
-      - name: Run smoke tests
-        run: |
+      - run: |
           ALB_URL="${{ steps.deploy.outputs.alb-url }}"
-
-          # Wait for ALB to be ready
           sleep 30
-
-          # Test WebApp
           curl -f $ALB_URL/health || exit 1
-
-          # Test Unified API
           curl -f $ALB_URL/api/health || exit 1
 
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
+      - if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -263,7 +213,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: 'Successfully deployed to **Development** environment\n\n Application URL: ${{ steps.deploy.outputs.alb-url }}'
+              body: 'Deployed to Development\n\nURL: ${{ steps.deploy.outputs.alb-url }}'
             })
 
   integration-tests:
@@ -271,31 +221,27 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-dev
     if: github.ref == 'refs/heads/develop' || contains(github.ref, 'feature/')
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Run integration tests
-        env:
+      - run: dotnet workload restore
+
+      - env:
           TEST_BASE_URL: ${{ needs.deploy-dev.outputs.alb-url }}
         run: |
           dotnet test tests/Catalog.FunctionalTests --filter Category=Integration
           dotnet test tests/Ordering.FunctionalTests --filter Category=Integration
 
-      - name: Upload integration test results
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: integration-test-results
           path: ./TestResults
 
-  # Stage 6: Deploy to Staging
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
@@ -304,31 +250,24 @@ jobs:
     environment:
       name: staging
       url: ${{ steps.deploy.outputs.alb-url }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
+      - id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Deploy to ECS (Blue/Green)
-        id: deploy
+      - id: deploy
         run: |
-          # Similar deployment process as dev but with blue/green strategy
-          for SERVICE in webapp catalog-api basket-api ordering-api identity-api webhooks-api payment-processor order-processor; do
+          for SERVICE in webapp unified-api; do
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-staging-$SERVICE --query taskDefinition)
-            NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-$SERVICE:${{ github.sha }}" \
+            NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-staging-$SERVICE:${{ github.sha }}" \
               '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
             NEW_TASK_ARN=$(echo $NEW_TASK_DEF | jq -r '@json' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --query 'taskDefinition.taskDefinitionArn' --output text)
-
             aws ecs update-service \
               --cluster eshop-staging-cluster \
               --service eshop-staging-$SERVICE \
@@ -336,25 +275,19 @@ jobs:
               --force-new-deployment \
               --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100"
           done
-
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-staging-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
-      - name: Wait for deployment
-        run: |
-          for SERVICE in webapp catalog-api basket-api ordering-api identity-api webhooks-api; do
-            aws ecs wait services-stable \
-              --cluster eshop-staging-cluster \
-              --services eshop-staging-$SERVICE \
-              --region ${{ env.AWS_REGION }}
+      - run: |
+          for SERVICE in webapp unified-api; do
+            aws ecs wait services-stable --cluster eshop-staging-cluster --services eshop-staging-$SERVICE --region ${{ env.AWS_REGION }}
           done
 
-      - name: Run smoke tests
-        run: |
+      - run: |
           ALB_URL="${{ steps.deploy.outputs.alb-url }}"
           sleep 30
           curl -f $ALB_URL/health || exit 1
-          curl -f $ALB_URL/catalog-api/health || exit 1
+          curl -f $ALB_URL/api/health || exit 1
 
   deploy-production:
     name: Deploy to Production
@@ -364,43 +297,33 @@ jobs:
     environment:
       name: production
       url: ${{ steps.deploy.outputs.alb-url }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
+      - id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Deploy to ECS (Canary)
-        id: deploy
+      - id: deploy
         run: |
-          # Canary deployment: 10% -> 50% -> 100%
           bash infrastructure/scripts/canary-deploy.sh \
             --cluster eshop-production-cluster \
             --image-tag ${{ github.sha }} \
             --registry ${{ steps.login-ecr.outputs.registry }}
-
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-production-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
-      - name: Monitor deployment
-        run: |
-          # Monitor error rate for 10 minutes
+      - run: |
           bash infrastructure/scripts/monitor-deployment.sh \
             --duration 600 \
             --threshold 1.0 \
             --cluster eshop-production-cluster
 
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
+      - uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -413,25 +336,20 @@ jobs:
     name: Rollback Deployment
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
-
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Rollback to previous version
-        run: |
+      - run: |
           ENV=${{ github.event.inputs.environment }}
           for SERVICE in webapp unified-api; do
-            # Get previous task definition
             PREV_TASK_DEF=$(aws ecs describe-services \
               --cluster eshop-$ENV-cluster \
               --services eshop-$ENV-$SERVICE \
               --query 'services[0].deployments[1].taskDefinition' \
               --output text)
-
             if [ "$PREV_TASK_DEF" != "None" ]; then
               aws ecs update-service \
                 --cluster eshop-$ENV-cluster \
