@@ -17,7 +17,7 @@ on:
           - production
 
 env:
-  AWS_REGION: eu-north-1
+  AWS_REGION: eu-west-3
   DOTNET_VERSION: '10.0.x'
   ENVIRONMENT: dev
 
@@ -96,7 +96,7 @@ jobs:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && vars.INFRASTRUCTURE_DEPLOYED == 'true'
     strategy:
       matrix:
         service:
@@ -164,7 +164,7 @@ jobs:
     name: Deploy to Development
     runs-on: ubuntu-latest
     needs: build-docker-images
-    if: github.ref == 'refs/heads/develop' || contains(github.ref, 'feature/')
+    if: (github.ref == 'refs/heads/develop' || contains(github.ref, 'feature/')) && vars.INFRASTRUCTURE_DEPLOYED == 'true'
     environment:
       name: development
       url: ${{ steps.deploy.outputs.alb-url }}
@@ -217,7 +217,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: deploy-dev
-    if: github.ref == 'refs/heads/develop' || contains(github.ref, 'feature/')
+    if: (github.ref == 'refs/heads/develop' || contains(github.ref, 'feature/')) && vars.INFRASTRUCTURE_DEPLOYED == 'true'
     steps:
       - uses: actions/checkout@v4
 
