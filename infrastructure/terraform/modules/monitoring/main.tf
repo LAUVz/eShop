@@ -50,8 +50,16 @@ resource "aws_ce_anomaly_subscription" "cost" {
     aws_ce_anomaly_monitor.cost.arn,
   ]
 
+  threshold_expression {
+    dimension {
+      key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+      values        = ["100"]
+      match_options = ["GREATER_THAN_OR_EQUAL"]
+    }
+  }
+
   subscriber {
-    type    = "SNS"
-    address = aws_sns_topic.alerts.arn
+    type    = "EMAIL"
+    address = var.sns_email_endpoint
   }
 }

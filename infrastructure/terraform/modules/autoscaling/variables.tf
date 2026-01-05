@@ -31,3 +31,9 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "ecs_service_names" {
+  description = "Map of ECS service names to ensure services exist before scaling"
+  type        = map(string)
+  default     = {}
+}

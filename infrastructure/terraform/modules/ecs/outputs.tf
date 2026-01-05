@@ -9,3 +9,7 @@ output "cluster_arn" {
 output "service_names" {
   value = [for v in aws_ecs_service.service : v.name]
 }
+
+output "service_ids" {
+  value = { for k, v in aws_ecs_service.service : k => v.id }
+}

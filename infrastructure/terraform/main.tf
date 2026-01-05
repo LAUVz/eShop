@@ -9,12 +9,10 @@ terraform {
   }
 
   # Backend configuration for state management
-  # For local development: Uses local file (terraform.tfstate)
-  # Setting below (s3) must be commented out for local
+  # Values provided via backend config file
+  # Run: terraform init -backend-config=terraform-backend.tfvars
 
   backend "s3" {
-    Values provided via backend config file
-    Run: terraform init -backend-config=backend.hcl
   }
 }
 
@@ -251,9 +249,10 @@ module "monitoring" {
 module "autoscaling" {
   source = "./modules/autoscaling"
 
-  name_prefix      = local.name_prefix
-  ecs_cluster_name = module.ecs.cluster_name
-  services         = local.services
+  name_prefix       = local.name_prefix
+  ecs_cluster_name  = module.ecs.cluster_name
+  services          = local.services
+  ecs_service_names = module.ecs.service_ids
 
   # Scaling configuration
   min_capacity = var.environment == "production" ? 2 : 1
