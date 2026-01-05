@@ -1,6 +1,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+# Copy Directory.*.props files for central package management
+COPY ["Directory.Build.props", "./"]
+COPY ["Directory.Build.targets", "./"]
+COPY ["Directory.Packages.props", "./"]
+
 # Copy all API project files and dependencies
 COPY ["src/Catalog.API/Catalog.API.csproj", "src/Catalog.API/"]
 COPY ["src/Basket.API/Basket.API.csproj", "src/Basket.API/"]
