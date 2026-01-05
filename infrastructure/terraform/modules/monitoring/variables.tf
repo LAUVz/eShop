@@ -1,0 +1,25 @@
+variable "project_name" {
+  description = "Project name"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+}
+
+variable "sns_email_endpoint" {
+  description = "Email for SNS alerts"
+  type        = string
+}
+
+variable "common_tags" {
+  description = "Common tags to apply"
+  type        = map(string)
+  default     = {}
+}

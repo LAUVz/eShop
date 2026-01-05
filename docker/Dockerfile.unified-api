@@ -1,0 +1,104 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy all API project files
+COPY ["src/Catalog.API/Catalog.API.csproj", "src/Catalog.API/"]
+COPY ["src/Basket.API/Basket.API.csproj", "src/Basket.API/"]
+COPY ["src/Ordering.API/Ordering.API.csproj", "src/Ordering.API/"]
+COPY ["src/Identity.API/Identity.API.csproj", "src/Identity.API/"]
+COPY ["src/Webhooks.API/Webhooks.API.csproj", "src/Webhooks.API/"]
+COPY ["src/eShop.ServiceDefaults/eShop.ServiceDefaults.csproj", "src/eShop.ServiceDefaults/"]
+
+# Restore dependencies for all APIs
+RUN dotnet restore "src/Catalog.API/Catalog.API.csproj" && \
+    dotnet restore "src/Basket.API/Basket.API.csproj" && \
+    dotnet restore "src/Ordering.API/Ordering.API.csproj" && \
+    dotnet restore "src/Identity.API/Identity.API.csproj" && \
+    dotnet restore "src/Webhooks.API/Webhooks.API.csproj"
+
+# Copy all source code
+COPY src/ ./src/
+
+# Build all APIs
+RUN dotnet build "src/Catalog.API/Catalog.API.csproj" -c Release -o /app/build/catalog && \
+    dotnet build "src/Basket.API/Basket.API.csproj" -c Release -o /app/build/basket && \
+    dotnet build "src/Ordering.API/Ordering.API.csproj" -c Release -o /app/build/ordering && \
+    dotnet build "src/Identity.API/Identity.API.csproj" -c Release -o /app/build/identity && \
+    dotnet build "src/Webhooks.API/Webhooks.API.csproj" -c Release -o /app/build/webhooks
+
+# Publish all APIs
+FROM build AS publish
+RUN dotnet publish "src/Catalog.API/Catalog.API.csproj" -c Release -o /app/publish/catalog /p:UseAppHost=false && \
+    dotnet publish "src/Basket.API/Basket.API.csproj" -c Release -o /app/publish/basket /p:UseAppHost=false && \
+    dotnet publish "src/Ordering.API/Ordering.API.csproj" -c Release -o /app/publish/ordering /p:UseAppHost=false && \
+    dotnet publish "src/Identity.API/Identity.API.csproj" -c Release -o /app/publish/identity /p:UseAppHost=false && \
+    dotnet publish "src/Webhooks.API/Webhooks.API.csproj" -c Release -o /app/publish/webhooks /p:UseAppHost=false
+
+# Final runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+
+# Install required packages
+RUN apt-get update && \
+    apt-get install -y curl supervisor && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy all published APIs
+COPY --from=publish /app/publish/catalog ./catalog/
+COPY --from=publish /app/publish/basket ./basket/
+COPY --from=publish /app/publish/ordering ./ordering/
+COPY --from=publish /app/publish/identity ./identity/
+COPY --from=publish /app/publish/webhooks ./webhooks/
+
+# Create supervisor configuration to run all APIs
+RUN echo '[supervisord]' > /etc/supervisor/conf.d/apis.conf && \
+    echo 'nodaemon=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'user=root' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '[program:catalog-api]' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'command=dotnet Catalog.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'directory=/app/catalog' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'environment=ASPNETCORE_URLS="http://+:8081"' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '[program:basket-api]' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'command=dotnet Basket.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'directory=/app/basket' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'environment=ASPNETCORE_URLS="http://+:8082"' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '[program:ordering-api]' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'command=dotnet Ordering.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'directory=/app/ordering' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'environment=ASPNETCORE_URLS="http://+:8083"' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '[program:identity-api]' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'command=dotnet Identity.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'directory=/app/identity' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'environment=ASPNETCORE_URLS="http://+:8084"' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '' >> /etc/supervisor/conf.d/apis.conf && \
+    echo '[program:webhooks-api]' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'command=dotnet Webhooks.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'directory=/app/webhooks' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
+    echo 'environment=ASPNETCORE_URLS="http://+:8085"' >> /etc/supervisor/conf.d/apis.conf
+
+# Expose all API ports
+EXPOSE 8081 8082 8083 8084 8085
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Set environment variables
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+# Run supervisor to manage all APIs
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/apis.conf"]

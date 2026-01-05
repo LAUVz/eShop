@@ -5,6 +5,8 @@
 
 # dotenv files
 .env
+.env.*
+!.env.example
 
 # User-specific files
 *.rsuser
@@ -491,3 +493,63 @@ $RECYCLE.BIN/
 /playwright/.auth/
 /user.json
 .azure
+
+##
+## Infrastructure & DevOps Secrets
+##
+
+# Terraform state files (contain secrets)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Terraform variable files with secrets
+terraform.tfvars
+*.auto.tfvars
+**/terraform.tfvars
+**/terraform-backend.tfvars
+backend.hcl
+
+# AWS/Cloud credentials
+*.pem
+*.key
+*.crt
+credentials
+.aws/
+
+# Infrastructure setup outputs
+infrastructure/aws-setup/setup-summary.txt
+infrastructure/aws-setup/github-secrets.txt
+infrastructure/aws-setup/setup-config.json
+
+# SSH keys
+id_rsa
+id_rsa.pub
+*.ppk
+
+# Database connection strings
+appsettings.Development.json
+appsettings.Local.json
+appsettings.Production.json
+connectionstrings.json
+
+# Secrets and sensitive data
+secrets.json
+secrets.*.json
+**/secrets/
+*.secret
+*.secrets
+
+# Kubernetes secrets
+*.kubeconfig
+kube-config
+
+# Docker compose with secrets
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Local configuration
+local.settings.json
+.localconfig
