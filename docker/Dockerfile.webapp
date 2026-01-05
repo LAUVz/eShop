@@ -4,6 +4,10 @@ WORKDIR /src
 # Copy solution and project files
 COPY ["src/WebApp/WebApp.csproj", "src/WebApp/"]
 COPY ["src/eShop.ServiceDefaults/eShop.ServiceDefaults.csproj", "src/eShop.ServiceDefaults/"]
+COPY ["src/EventBusRabbitMQ/EventBusRabbitMQ.csproj", "src/EventBusRabbitMQ/"]
+COPY ["src/EventBus/EventBus.csproj", "src/EventBus/"]
+COPY ["src/WebAppComponents/WebAppComponents.csproj", "src/WebAppComponents/"]
+COPY ["src/Shared/", "src/Shared/"]
 
 # Restore dependencies
 RUN dotnet restore "src/WebApp/WebApp.csproj"
