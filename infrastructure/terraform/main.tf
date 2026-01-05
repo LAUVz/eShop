@@ -56,6 +56,29 @@ locals {
       health_check  = "/health"
     }
   }
+
+  # Lambda functions configuration
+  lambda_functions = {
+    payment-processor = {
+      memory_size = 512
+      timeout     = 60
+      environment = {
+        SQS_QUEUE_URL = ""  # Will be set from module.sqs
+        RDS_ENDPOINT  = ""  # Will be set from module.rds
+      }
+    }
+    order-processor = {
+      memory_size = 512
+      timeout     = 60
+      environment = {
+        SQS_QUEUE_URL = ""  # Will be set from module.sqs
+        RDS_ENDPOINT  = ""  # Will be set from module.rds
+      }
+    }
+  }
+
+  # All services (ECS + Lambda) for ECR repositories
+  all_services = concat(keys(local.services), keys(local.lambda_functions))
 }
 
 # Modules
@@ -102,7 +125,7 @@ module "ecr" {
   source = "./modules/ecr"
 
   name_prefix = local.name_prefix
-  services    = keys(local.services)
+  services    = local.all_services  # Include both ECS and Lambda services
 
   tags = local.common_tags
 }
@@ -179,34 +202,27 @@ module "sqs" {
   tags = local.common_tags
 }
 
-# Lambda functions for background processing (replaces ECS tasks)
+# Lambda functions for background processing (COST-OPTIMIZATION: Lambda instead of ECS)
 module "lambda" {
   source = "./modules/lambda"
 
   name_prefix = local.name_prefix
 
-  # Functions to create
+  # Functions configuration
   functions = {
-    payment-processor = {
-      handler     = "PaymentProcessor::PaymentProcessor.Function::FunctionHandler"
-      runtime     = "dotnet8"
-      memory_size = 512
-      timeout     = 60
-      environment = {
+    for name, config in local.lambda_functions : name => {
+      memory_size = config.memory_size
+      timeout     = config.timeout
+      environment = merge(config.environment, {
         SQS_QUEUE_URL = module.sqs.queue_url
         RDS_ENDPOINT  = module.rds.endpoint
-      }
+      })
     }
-    order-processor = {
-      handler     = "OrderProcessor::OrderProcessor.Function::FunctionHandler"
-      runtime     = "dotnet8"
-      memory_size = 512
-      timeout     = 60
-      environment = {
-        SQS_QUEUE_URL = module.sqs.queue_url
-        RDS_ENDPOINT  = module.rds.endpoint
-      }
-    }
+  }
+
+  # ECR repository URLs for container images
+  ecr_repository_urls = {
+    for name in keys(local.lambda_functions) : name => module.ecr.repository_urls[name]
   }
 
   # SQS trigger

@@ -6,12 +6,16 @@ variable "name_prefix" {
 variable "functions" {
   description = "Map of Lambda functions to create"
   type = map(object({
-    handler     = string
-    runtime     = string
     memory_size = number
     timeout     = number
     environment = map(string)
   }))
+}
+
+variable "ecr_repository_urls" {
+  description = "Map of ECR repository URLs for container images"
+  type        = map(string)
+  default     = {}
 }
 
 variable "sqs_queue_arn" {

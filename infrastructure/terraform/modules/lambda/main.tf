@@ -41,16 +41,20 @@ resource "aws_lambda_function" "function" {
 
   function_name = "${var.name_prefix}-${each.key}"
   role          = aws_iam_role.lambda[each.key].arn
+  package_type  = "Image"
 
-  # Placeholder - actual code deployed via CI/CD
-  filename      = "${path.module}/placeholder.zip"
-  handler       = each.value.handler
-  runtime       = each.value.runtime
+  # Use container image from ECR
+  image_uri     = "${var.ecr_repository_urls[each.key]}:latest"
   memory_size   = each.value.memory_size
   timeout       = each.value.timeout
 
   environment {
     variables = each.value.environment
+  }
+
+  # Allow updates without recreating the function
+  lifecycle {
+    ignore_changes = [image_uri]
   }
 
   tags = var.tags
@@ -64,13 +68,3 @@ resource "aws_lambda_event_source_mapping" "sqs" {
   batch_size       = 10
 }
 
-# Create placeholder zip
-data "archive_file" "placeholder" {
-  type        = "zip"
-  output_path = "${path.module}/placeholder.zip"
-
-  source {
-    content  = "exports.handler = async (event) => { console.log('Placeholder function'); };"
-    filename = "index.js"
-  }
-}

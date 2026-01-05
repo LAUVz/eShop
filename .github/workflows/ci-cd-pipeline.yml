@@ -181,6 +181,7 @@ jobs:
 
       - id: deploy
         run: |
+          # Deploy ECS services
           for SERVICE in webapp unified-api; do
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-dev-$SERVICE --query taskDefinition)
             NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:${{ github.sha }}" \
@@ -188,6 +189,14 @@ jobs:
             NEW_TASK_ARN=$(echo $NEW_TASK_DEF | jq -r '@json' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --query 'taskDefinition.taskDefinitionArn' --output text)
             aws ecs update-service --cluster eshop-dev-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
           done
+
+          # Deploy Lambda functions
+          for FUNCTION in payment-processor order-processor; do
+            aws lambda update-function-code \
+              --function-name eshop-dev-$FUNCTION \
+              --image-uri ${{ steps.login-ecr.outputs.registry }}/eshop-dev-$FUNCTION:latest
+          done
+
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-dev-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
