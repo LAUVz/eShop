@@ -1,0 +1,42 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy Directory.*.props files for central package management
+COPY ["Directory.Build.props", "./"]
+COPY ["Directory.Build.targets", "./"]
+COPY ["Directory.Packages.props", "./"]
+
+# Copy solution and project files for restore
+COPY ["src/PaymentProcessor/PaymentProcessor.csproj", "src/PaymentProcessor/"]
+COPY ["src/eShop.ServiceDefaults/eShop.ServiceDefaults.csproj", "src/eShop.ServiceDefaults/"]
+COPY ["src/EventBusRabbitMQ/EventBusRabbitMQ.csproj", "src/EventBusRabbitMQ/"]
+COPY ["src/EventBus/EventBus.csproj", "src/EventBus/"]
+COPY ["src/Shared/", "src/Shared/"]
+
+# Restore dependencies
+RUN dotnet restore "src/PaymentProcessor/PaymentProcessor.csproj"
+
+# Copy all source code
+COPY src/ ./src/
+
+# Build the application
+WORKDIR "/src/src/PaymentProcessor"
+RUN dotnet build "PaymentProcessor.csproj" -c Release -o /app/build
+
+# Publish the application
+FROM build AS publish
+RUN dotnet publish "PaymentProcessor.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+# Final runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+
+# Copy published application
+COPY --from=publish /app/publish .
+
+# Set environment variables
+ENV ASPNETCORE_URLS=http://+:8082
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+# Run the application
+ENTRYPOINT ["dotnet", "PaymentProcessor.dll"]
