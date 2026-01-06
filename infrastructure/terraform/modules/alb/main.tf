@@ -56,3 +56,35 @@ resource "aws_lb_listener_rule" "unified_api" {
     }
   }
 }
+
+resource "aws_lb_listener_rule" "payment_processor" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 101
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main["payment-processor"].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/payment/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "order_processor" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 102
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main["order-processor"].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/order/*"]
+    }
+  }
+}

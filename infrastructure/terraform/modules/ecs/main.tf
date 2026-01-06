@@ -65,10 +65,14 @@ resource "aws_ecs_service" "service" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = var.alb_target_group_arns[each.key]
-    container_name   = each.key
-    container_port   = each.value.port
+  # Only add load balancer for web services (use_alb = true)
+  dynamic "load_balancer" {
+    for_each = lookup(each.value, "use_alb", false) ? [1] : []
+    content {
+      target_group_arn = var.alb_target_group_arns[each.key]
+      container_name   = each.key
+      container_port   = each.value.port
+    }
   }
 
   tags = var.tags

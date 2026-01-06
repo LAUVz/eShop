@@ -38,7 +38,8 @@ locals {
     ManagedBy   = "Terraform"
   }
 
-  services = {
+  # Web services (with load balancer)
+  web_services = {
     webapp = {
       name          = "webapp"
       port          = 8080
@@ -46,6 +47,7 @@ locals {
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
       health_check  = "/health"
+      use_alb       = true
     }
     unified-api = {
       name          = "unified-api"
@@ -54,7 +56,12 @@ locals {
       memory        = 1024
       desired_count = var.environment == "production" ? 2 : 1
       health_check  = "/health"
+      use_alb       = true
     }
+  }
+
+  # Worker services (background processors, no load balancer)
+  worker_services = {
     payment-processor = {
       name          = "payment-processor"
       port          = 8082
@@ -62,6 +69,7 @@ locals {
       memory        = 512
       desired_count = 1
       health_check  = "/health"
+      use_alb       = false
     }
     order-processor = {
       name          = "order-processor"
@@ -70,8 +78,12 @@ locals {
       memory        = 512
       desired_count = 1
       health_check  = "/health"
+      use_alb       = false
     }
   }
+
+  # All services combined
+  services = merge(local.web_services, local.worker_services)
 
   # All services for ECR repositories
   all_services = keys(local.services)
