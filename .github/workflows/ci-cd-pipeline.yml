@@ -181,11 +181,16 @@ jobs:
 
       - id: deploy
         run: |
-          # Deploy ECS services
+          set -euo pipefail
+
           for SERVICE in webapp unified-api payment-processor order-processor; do
+            echo "Deploying $SERVICE..."
+
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-dev-$SERVICE --query taskDefinition)
-            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:latest" \
-              '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:latest" --arg SERVICE_NAME "$SERVICE" \
+              '.containerDefinitions |= map(if .name == $SERVICE_NAME then .image = $IMAGE else . end)
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
             NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
             aws ecs update-service --cluster eshop-dev-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
           done
@@ -193,9 +198,31 @@ jobs:
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-dev-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
-      - run: |
+      - name: Wait for deployment with timeout
+        run: |
+          set -euo pipefail
+
           for SERVICE in webapp unified-api payment-processor order-processor; do
-            aws ecs wait services-stable --cluster eshop-dev-cluster --services $SERVICE --region ${{ env.AWS_REGION }}
+            echo "Waiting for $SERVICE..."
+
+            for i in {1..40}; do
+              RUNNING=$(aws ecs describe-services --cluster eshop-dev-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
+              DESIRED=$(aws ecs describe-services --cluster eshop-dev-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
+
+              echo "  $SERVICE: $RUNNING/$DESIRED"
+
+              if [ "$RUNNING" = "$DESIRED" ]; then
+                echo "✓ $SERVICE stable"
+                break
+              fi
+
+              if [ $i -eq 40 ]; then
+                echo "✗ Timeout waiting for $SERVICE"
+                exit 1
+              fi
+
+              sleep 15
+            done
           done
 
       - run: |
