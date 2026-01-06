@@ -11,10 +11,10 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "main" {
-  for_each = toset(["webapp", "unified-api"])
+  for_each = toset(["webapp", "unified-api", "payment-processor", "order-processor"])
 
   name     = "${var.name_prefix}-${each.key}"
-  port     = each.key == "webapp" ? 8080 : 8081
+  port     = each.key == "webapp" ? 8080 : each.key == "unified-api" ? 8081 : each.key == "payment-processor" ? 8082 : 8083
   protocol = "HTTP"
   vpc_id   = var.vpc_id
   target_type = "ip"

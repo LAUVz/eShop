@@ -55,29 +55,25 @@ locals {
       desired_count = var.environment == "production" ? 2 : 1
       health_check  = "/health"
     }
-  }
-
-  # Lambda functions configuration
-  lambda_functions = {
     payment-processor = {
-      memory_size = 512
-      timeout     = 60
-      environment = {
-        SQS_QUEUE_URL = ""  # Will be set from module.sqs
-        RDS_ENDPOINT  = ""  # Will be set from module.rds
-      }
+      name          = "payment-processor"
+      port          = 8082
+      cpu           = 256
+      memory        = 512
+      desired_count = 1
+      health_check  = "/health"
     }
     order-processor = {
-      memory_size = 512
-      timeout     = 60
-      environment = {
-        SQS_QUEUE_URL = ""  # Will be set from module.sqs
-        RDS_ENDPOINT  = ""  # Will be set from module.rds
-      }
+      name          = "order-processor"
+      port          = 8083
+      cpu           = 256
+      memory        = 512
+      desired_count = 1
+      health_check  = "/health"
     }
   }
 
-  # All services for ECR repositories (ECS only, Lambda removed)
+  # All services for ECR repositories
   all_services = keys(local.services)
 }
 

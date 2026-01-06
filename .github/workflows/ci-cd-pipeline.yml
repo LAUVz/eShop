@@ -106,6 +106,12 @@ jobs:
           - name: unified-api
             dockerfile: docker/Dockerfile.unified-api
             context: .
+          - name: payment-processor
+            dockerfile: docker/Dockerfile.payment-processor
+            context: .
+          - name: order-processor
+            dockerfile: docker/Dockerfile.order-processor
+            context: .
     steps:
       - uses: actions/checkout@v4
 
@@ -176,7 +182,7 @@ jobs:
       - id: deploy
         run: |
           # Deploy ECS services
-          for SERVICE in webapp unified-api; do
+          for SERVICE in webapp unified-api payment-processor order-processor; do
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-dev-$SERVICE --query taskDefinition)
             NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:latest" \
               '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
@@ -188,7 +194,7 @@ jobs:
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
       - run: |
-          for SERVICE in webapp unified-api; do
+          for SERVICE in webapp unified-api payment-processor order-processor; do
             aws ecs wait services-stable --cluster eshop-dev-cluster --services $SERVICE --region ${{ env.AWS_REGION }}
           done
 
