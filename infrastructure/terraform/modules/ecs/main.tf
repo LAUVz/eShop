@@ -17,7 +17,12 @@ locals {
       { name = "IdentityUrl", value = "http://${var.alb_dns_name}/identity" },
       { name = "CallBackUrl", value = "http://${var.alb_dns_name}" },
       { name = "ASPNETCORE_URLS", value = "http://+:8080" },
-      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
+      # Override service discovery to point to ALB paths
+      { name = "services__catalog-api__http__0", value = "http://${var.alb_dns_name}" },
+      { name = "services__catalog-api__https__0", value = "http://${var.alb_dns_name}" },
+      { name = "services__basket-api__http__0", value = "http://${var.alb_dns_name}" },
+      { name = "services__ordering-api__http__0", value = "http://${var.alb_dns_name}" }
     ]
     unified-api = [
       { name = "RDS_HOST", value = local.rds_host },
@@ -63,7 +68,7 @@ resource "aws_ecs_task_definition" "service" {
 
   container_definitions = jsonencode([{
     name  = each.key
-    image = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder
+    image = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder - updated by CI/CD
     portMappings = [{
       containerPort = each.value.port
       protocol      = "tcp"
@@ -84,6 +89,11 @@ resource "aws_ecs_task_definition" "service" {
       }
     }
   }])
+
+  # Ignore changes to container image - managed by CI/CD pipeline
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 
   tags = var.tags
 }
