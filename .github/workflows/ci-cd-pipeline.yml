@@ -184,9 +184,9 @@ jobs:
           # Deploy ECS services
           for SERVICE in webapp unified-api; do
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-dev-$SERVICE --query taskDefinition)
-            NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:${{ github.sha }}" \
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-dev-$SERVICE:latest" \
               '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-            NEW_TASK_ARN=$(echo $NEW_TASK_DEF | jq -r '@json' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --query 'taskDefinition.taskDefinitionArn' --output text)
+            NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
             aws ecs update-service --cluster eshop-dev-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
           done
 
