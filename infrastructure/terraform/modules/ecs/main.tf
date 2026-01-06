@@ -1,24 +1,36 @@
 # ECS Cluster and Services
 
 locals {
+  # Parse RDS endpoint to get host and port
+  rds_parts = split(":", var.rds_endpoint)
+  rds_host  = local.rds_parts[0]
+  rds_port  = local.rds_parts[1]
+
+  # RabbitMQ connection string (using service discovery via task networking)
+  # RabbitMQ will be accessible at rabbitmq.local within the VPC
+  rabbitmq_host = "rabbitmq.${var.name_prefix}.local"
+  eventbus_connection = "amqp://guest:guest@${local.rabbitmq_host}:5672"
+
   # Build environment variables for each service
   service_env_vars = {
     webapp = [
       { name = "IdentityUrl", value = "http://${var.alb_dns_name}/identity" },
       { name = "CallBackUrl", value = "http://${var.alb_dns_name}" },
-      { name = "ASPNETCORE_URLS", value = "http://+:8080" }
+      { name = "ASPNETCORE_URLS", value = "http://+:8080" },
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
     ]
     unified-api = [
-      { name = "ASPNETCORE_URLS", value = "http://+:8081" },
-      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" }
+      { name = "RDS_HOST", value = local.rds_host },
+      { name = "RDS_PORT", value = local.rds_port },
+      { name = "RDS_PASSWORD", value = var.rds_password },
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
     ]
+    rabbitmq = []
     payment-processor = [
-      { name = "ASPNETCORE_URLS", value = "http://+:8082" },
-      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" }
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
     ]
     order-processor = [
-      { name = "ASPNETCORE_URLS", value = "http://+:8083" },
-      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" }
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
     ]
   }
 }
@@ -99,6 +111,47 @@ resource "aws_ecs_service" "service" {
       container_name   = each.key
       container_port   = each.value.port
     }
+  }
+
+  # Enable service discovery for RabbitMQ
+  dynamic "service_registries" {
+    for_each = each.key == "rabbitmq" ? [1] : []
+    content {
+      registry_arn = aws_service_discovery_service.rabbitmq[0].arn
+    }
+  }
+
+  tags = var.tags
+}
+
+# Service Discovery namespace for internal service communication
+resource "aws_service_discovery_private_dns_namespace" "main" {
+  name        = "${var.name_prefix}.local"
+  vpc         = var.vpc_id
+  description = "Service discovery namespace for ${var.name_prefix}"
+
+  tags = var.tags
+}
+
+# Service Discovery service for RabbitMQ
+resource "aws_service_discovery_service" "rabbitmq" {
+  count = contains(keys(var.services), "rabbitmq") ? 1 : 0
+
+  name = "rabbitmq"
+
+  dns_config {
+    namespace_id = aws_service_discovery_private_dns_namespace.main.id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
   }
 
   tags = var.tags

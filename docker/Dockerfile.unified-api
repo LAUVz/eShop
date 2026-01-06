@@ -61,45 +61,68 @@ COPY --from=publish /app/publish/ordering ./ordering/
 COPY --from=publish /app/publish/identity ./identity/
 COPY --from=publish /app/publish/webhooks ./webhooks/
 
-# Create supervisor configuration to run all APIs
-RUN echo '[supervisord]' > /etc/supervisor/conf.d/apis.conf && \
-    echo 'nodaemon=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'user=root' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '[program:catalog-api]' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'command=dotnet Catalog.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'directory=/app/catalog' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'environment=ASPNETCORE_URLS="http://+:8081"' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '[program:basket-api]' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'command=dotnet Basket.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'directory=/app/basket' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'environment=ASPNETCORE_URLS="http://+:8082"' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '[program:ordering-api]' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'command=dotnet Ordering.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'directory=/app/ordering' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'environment=ASPNETCORE_URLS="http://+:8083"' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '[program:identity-api]' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'command=dotnet Identity.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'directory=/app/identity' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'environment=ASPNETCORE_URLS="http://+:8084"' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '' >> /etc/supervisor/conf.d/apis.conf && \
-    echo '[program:webhooks-api]' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'command=dotnet Webhooks.API.dll' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'directory=/app/webhooks' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autostart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'autorestart=true' >> /etc/supervisor/conf.d/apis.conf && \
-    echo 'environment=ASPNETCORE_URLS="http://+:8085"' >> /etc/supervisor/conf.d/apis.conf
+# Create supervisor configuration to run all APIs with proper logging
+COPY <<EOF /etc/supervisor/conf.d/apis.conf
+[supervisord]
+nodaemon=true
+user=root
+loglevel=info
+
+[program:catalog-api]
+command=dotnet Catalog.API.dll
+directory=/app/catalog
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+environment=ASPNETCORE_URLS="http://+:8081",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__CatalogDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_catalog;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+
+[program:basket-api]
+command=dotnet Basket.API.dll
+directory=/app/basket
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+environment=ASPNETCORE_URLS="http://+:8082",ASPNETCORE_ENVIRONMENT="Development"
+
+[program:ordering-api]
+command=dotnet Ordering.API.dll
+directory=/app/ordering
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+environment=ASPNETCORE_URLS="http://+:8083",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__OrderingDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_ordering;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+
+[program:identity-api]
+command=dotnet Identity.API.dll
+directory=/app/identity
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+environment=ASPNETCORE_URLS="http://+:8084",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__IdentityDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_identity;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+
+[program:webhooks-api]
+command=dotnet Webhooks.API.dll
+directory=/app/webhooks
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+environment=ASPNETCORE_URLS="http://+:8085",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__WebhooksDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_webhooks;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+EOF
 
 # Expose all API ports
 EXPOSE 8081 8082 8083 8084 8085

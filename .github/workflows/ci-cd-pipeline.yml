@@ -112,6 +112,9 @@ jobs:
           - name: order-processor
             dockerfile: docker/Dockerfile.order-processor
             context: .
+          - name: rabbitmq
+            dockerfile: docker/Dockerfile.rabbitmq
+            context: .
     steps:
       - uses: actions/checkout@v4
 
@@ -183,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for SERVICE in webapp unified-api payment-processor order-processor; do
+          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
             echo "Deploying $SERVICE..."
 
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-dev-$SERVICE --query taskDefinition)
@@ -202,7 +205,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for SERVICE in webapp unified-api payment-processor order-processor; do
+          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
             echo "Waiting for $SERVICE..."
 
             for i in {1..40}; do

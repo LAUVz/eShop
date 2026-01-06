@@ -60,6 +60,19 @@ locals {
     }
   }
 
+  # Infrastructure services (no load balancer)
+  infrastructure_services = {
+    rabbitmq = {
+      name          = "rabbitmq"
+      port          = 5672
+      cpu           = 256
+      memory        = 512
+      desired_count = 1
+      health_check  = "/health"
+      use_alb       = false
+    }
+  }
+
   # Worker services (background processors, no load balancer)
   worker_services = {
     payment-processor = {
@@ -83,7 +96,7 @@ locals {
   }
 
   # All services combined
-  services = merge(local.web_services, local.worker_services)
+  services = merge(local.web_services, local.infrastructure_services, local.worker_services)
 
   # All services for ECR repositories
   all_services = keys(local.services)
@@ -152,6 +165,7 @@ module "ecs" {
 
   # Dependencies
   rds_endpoint           = module.rds.endpoint
+  rds_password           = var.rds_master_password
   sqs_queue_url          = module.sqs.queue_url  # COST-OPTIMIZATION: SQS instead of RabbitMQ
 
   tags = local.common_tags

@@ -36,7 +36,7 @@ COPY --from=publish /app/publish .
 
 # Set environment variables
 ENV ASPNETCORE_URLS=http://+:8082
-ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_ENVIRONMENT=Development
 
 # Run the application
 ENTRYPOINT ["dotnet", "PaymentProcessor.dll"]

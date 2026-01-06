@@ -41,6 +41,14 @@ resource "aws_security_group" "ecs" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # Allow ECS tasks to communicate with each other (for RabbitMQ, databases, etc.)
+  ingress {
+    from_port = 0
+    to_port   = 65535
+    protocol  = "tcp"
+    self      = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

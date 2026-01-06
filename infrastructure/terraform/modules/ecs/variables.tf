@@ -38,6 +38,12 @@ variable "rds_endpoint" {
   type = string
 }
 
+variable "rds_password" {
+  type        = string
+  description = "RDS master password for database connections"
+  sensitive   = true
+}
+
 variable "sqs_queue_url" {
   type = string
 }
