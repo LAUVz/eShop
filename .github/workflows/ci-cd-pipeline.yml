@@ -151,7 +151,7 @@ jobs:
       - uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/eshop-dev-${{ matrix.service.name }}:${{ github.sha }}
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/eshop-dev-${{ matrix.service.name }}:latest
           format: 'sarif'
           output: 'trivy-image-results.sarif'
 
