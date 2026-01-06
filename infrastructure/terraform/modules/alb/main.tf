@@ -11,10 +11,10 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "main" {
-  for_each = toset(["webapp", "unified-api", "payment-processor", "order-processor"])
+  for_each = toset(["webapp", "unified-api"])
 
   name     = "${var.name_prefix}-${each.key}"
-  port     = each.key == "webapp" ? 8080 : each.key == "unified-api" ? 8081 : each.key == "payment-processor" ? 8082 : 8083
+  port     = each.key == "webapp" ? 8080 : 8081
   protocol = "HTTP"
   vpc_id   = var.vpc_id
   target_type = "ip"
@@ -41,7 +41,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-resource "aws_lb_listener_rule" "unified_api" {
+resource "aws_lb_listener_rule" "identity_api" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 100
 
@@ -52,39 +52,23 @@ resource "aws_lb_listener_rule" "unified_api" {
 
   condition {
     path_pattern {
-      values = ["/api/*"]
+      values = ["/identity/*"]
     }
   }
 }
 
-resource "aws_lb_listener_rule" "payment_processor" {
+resource "aws_lb_listener_rule" "api" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 101
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.main["payment-processor"].arn
+    target_group_arn = aws_lb_target_group.main["unified-api"].arn
   }
 
   condition {
     path_pattern {
-      values = ["/payment/*"]
-    }
-  }
-}
-
-resource "aws_lb_listener_rule" "order_processor" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 102
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.main["order-processor"].arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/order/*"]
+      values = ["/api/*"]
     }
   }
 }

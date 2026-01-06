@@ -147,6 +147,7 @@ module "ecs" {
   public_subnet_ids      = module.vpc.public_subnet_ids  # COST-OPTIMIZATION: Public subnets (no NAT Gateway)
   ecs_security_group_id  = module.security_groups.ecs_security_group_id
   alb_target_group_arns  = module.alb.target_group_arns
+  alb_dns_name           = module.alb.alb_dns_name
   services               = local.services
 
   # Dependencies

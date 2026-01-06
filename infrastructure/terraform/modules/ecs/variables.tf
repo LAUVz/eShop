@@ -18,6 +18,11 @@ variable "alb_target_group_arns" {
   type = map(string)
 }
 
+variable "alb_dns_name" {
+  type        = string
+  description = "ALB DNS name for service-to-service communication"
+}
+
 variable "services" {
   type = map(object({
     name          = string

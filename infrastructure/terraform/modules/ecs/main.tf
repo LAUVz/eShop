@@ -1,5 +1,28 @@
 # ECS Cluster and Services
 
+locals {
+  # Build environment variables for each service
+  service_env_vars = {
+    webapp = [
+      { name = "IdentityUrl", value = "http://${var.alb_dns_name}/identity" },
+      { name = "CallBackUrl", value = "http://${var.alb_dns_name}" },
+      { name = "ASPNETCORE_URLS", value = "http://+:8080" }
+    ]
+    unified-api = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8081" },
+      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" }
+    ]
+    payment-processor = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8082" },
+      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" }
+    ]
+    order-processor = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8083" },
+      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" }
+    ]
+  }
+}
+
 resource "aws_ecs_cluster" "main" {
   name = "${var.name_prefix}-cluster"
   tags = var.tags
@@ -33,10 +56,13 @@ resource "aws_ecs_task_definition" "service" {
       containerPort = each.value.port
       protocol      = "tcp"
     }]
-    environment = [
-      { name = "RDS_ENDPOINT", value = var.rds_endpoint },
-      { name = "SQS_QUEUE_URL", value = var.sqs_queue_url }
-    ]
+    environment = concat(
+      [
+        { name = "RDS_ENDPOINT", value = var.rds_endpoint },
+        { name = "SQS_QUEUE_URL", value = var.sqs_queue_url }
+      ],
+      lookup(local.service_env_vars, each.key, [])
+    )
     logConfiguration = {
       logDriver = "awslogs"
       options = {
