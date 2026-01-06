@@ -106,12 +106,6 @@ jobs:
           - name: unified-api
             dockerfile: docker/Dockerfile.unified-api
             context: .
-          - name: payment-processor
-            dockerfile: docker/Dockerfile.payment-processor
-            context: .
-          - name: order-processor
-            dockerfile: docker/Dockerfile.order-processor
-            context: .
     steps:
       - uses: actions/checkout@v4
 
@@ -188,13 +182,6 @@ jobs:
               '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
             NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
             aws ecs update-service --cluster eshop-dev-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
-          done
-
-          # Deploy Lambda functions
-          for FUNCTION in payment-processor order-processor; do
-            aws lambda update-function-code \
-              --function-name eshop-dev-$FUNCTION \
-              --image-uri ${{ steps.login-ecr.outputs.registry }}/eshop-dev-$FUNCTION:latest
           done
 
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-dev-alb --query 'LoadBalancers[0].DNSName' --output text)

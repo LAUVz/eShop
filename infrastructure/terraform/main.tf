@@ -77,8 +77,8 @@ locals {
     }
   }
 
-  # All services (ECS + Lambda) for ECR repositories
-  all_services = concat(keys(local.services), keys(local.lambda_functions))
+  # All services for ECR repositories (ECS only, Lambda removed)
+  all_services = keys(local.services)
 }
 
 # Modules
@@ -202,34 +202,35 @@ module "sqs" {
   tags = local.common_tags
 }
 
-# Lambda functions for background processing (COST-OPTIMIZATION: Lambda instead of ECS)
-module "lambda" {
-  source = "./modules/lambda"
-
-  name_prefix = local.name_prefix
-
-  # Functions configuration
-  functions = {
-    for name, config in local.lambda_functions : name => {
-      memory_size = config.memory_size
-      timeout     = config.timeout
-      environment = merge(config.environment, {
-        SQS_QUEUE_URL = module.sqs.queue_url
-        RDS_ENDPOINT  = module.rds.endpoint
-      })
-    }
-  }
-
-  # ECR repository URLs for container images
-  ecr_repository_urls = {
-    for name in keys(local.lambda_functions) : name => module.ecr.repository_urls[name]
-  }
-
-  # SQS trigger
-  sqs_queue_arn = module.sqs.queue_arn
-
-  tags = local.common_tags
-}
+# Lambda functions removed - applications not designed for Lambda runtime
+# Keeping configuration commented for reference
+# module "lambda" {
+#   source = "./modules/lambda"
+#
+#   name_prefix = local.name_prefix
+#
+#   # Functions configuration
+#   functions = {
+#     for name, config in local.lambda_functions : name => {
+#       memory_size = config.memory_size
+#       timeout     = config.timeout
+#       environment = merge(config.environment, {
+#         SQS_QUEUE_URL = module.sqs.queue_url
+#         RDS_ENDPOINT  = module.rds.endpoint
+#       })
+#     }
+#   }
+#
+#   # ECR repository URLs for container images
+#   ecr_repository_urls = {
+#     for name in keys(local.lambda_functions) : name => module.ecr.repository_urls[name]
+#   }
+#
+#   # SQS trigger
+#   sqs_queue_arn = module.sqs.queue_arn
+#
+#   tags = local.common_tags
+# }
 
 # Secrets Manager
 module "secrets" {
@@ -314,10 +315,11 @@ output "sqs_queue_url" {
   value       = module.sqs.queue_url
 }
 
-output "lambda_function_arns" {
-  description = "Lambda function ARNs"
-  value       = module.lambda.function_arns
-}
+# Lambda output commented out - module removed
+# output "lambda_function_arns" {
+#   description = "Lambda function ARNs"
+#   value       = module.lambda.function_arns
+# }
 
 output "monitoring_dashboard_url" {
   description = "CloudWatch dashboard URL"
