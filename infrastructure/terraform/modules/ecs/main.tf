@@ -90,11 +90,6 @@ resource "aws_ecs_task_definition" "service" {
     }
   }])
 
-  # Ignore changes to container image - managed by CI/CD pipeline
-  lifecycle {
-    ignore_changes = [task_definition]
-  }
-
   tags = var.tags
 }
 
@@ -129,6 +124,12 @@ resource "aws_ecs_service" "service" {
     content {
       registry_arn = aws_service_discovery_service.rabbitmq[0].arn
     }
+  }
+
+  # Ignore changes to task_definition - it's updated by CI/CD pipeline
+  # but preserve load balancer config which is immutable
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
   }
 
   tags = var.tags
