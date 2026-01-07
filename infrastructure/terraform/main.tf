@@ -162,6 +162,7 @@ module "ecs" {
   ecs_security_group_id  = module.security_groups.ecs_security_group_id
   alb_target_group_arns  = module.alb.target_group_arns
   alb_dns_name           = module.alb.alb_dns_name
+  app_url                = "https://eshop.henrijskons.eu"  # Custom domain with HTTPS
   services               = local.services
 
   # Dependencies

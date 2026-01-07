@@ -23,6 +23,12 @@ variable "alb_dns_name" {
   description = "ALB DNS name for service-to-service communication"
 }
 
+variable "app_url" {
+  type        = string
+  description = "Public URL for the application (with https://)"
+  default     = ""
+}
+
 variable "services" {
   type = map(object({
     name          = string

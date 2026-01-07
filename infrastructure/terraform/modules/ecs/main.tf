@@ -11,18 +11,21 @@ locals {
   rabbitmq_host = "rabbitmq.${var.name_prefix}.local"
   eventbus_connection = "amqp://guest:guest@${local.rabbitmq_host}:5672"
 
+  # Use custom app URL if provided, otherwise use ALB DNS name
+  base_url = var.app_url != "" ? var.app_url : "http://${var.alb_dns_name}"
+
   # Build environment variables for each service
   service_env_vars = {
     webapp = [
-      { name = "IdentityUrl", value = "http://${var.alb_dns_name}/identity" },
-      { name = "CallBackUrl", value = "http://${var.alb_dns_name}" },
+      { name = "IdentityUrl", value = "${local.base_url}/identity" },
+      { name = "CallBackUrl", value = local.base_url },
       { name = "ASPNETCORE_URLS", value = "http://+:8080" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
       # Override service discovery to point to ALB paths
-      { name = "services__catalog-api__http__0", value = "http://${var.alb_dns_name}" },
-      { name = "services__catalog-api__https__0", value = "http://${var.alb_dns_name}" },
-      { name = "services__basket-api__http__0", value = "http://${var.alb_dns_name}" },
-      { name = "services__ordering-api__http__0", value = "http://${var.alb_dns_name}" }
+      { name = "services__catalog-api__http__0", value = local.base_url },
+      { name = "services__catalog-api__https__0", value = local.base_url },
+      { name = "services__basket-api__http__0", value = local.base_url },
+      { name = "services__ordering-api__http__0", value = local.base_url }
     ]
     unified-api = [
       { name = "RDS_HOST", value = local.rds_host },
