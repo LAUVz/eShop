@@ -2,9 +2,9 @@ name: eShop CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop, 'feature/**' ]
+    branches: [ main, staging, dev, 'feature/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, staging, dev ]
   workflow_dispatch:
     inputs:
       environment:
@@ -118,6 +118,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "name=production" >> $GITHUB_OUTPUT
+            echo "prefix=eshop-prod" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "name=staging" >> $GITHUB_OUTPUT
+            echo "prefix=eshop-staging" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+            echo "name=development" >> $GITHUB_OUTPUT
+            echo "prefix=eshop-dev" >> $GITHUB_OUTPUT
+          else
+            echo "name=development" >> $GITHUB_OUTPUT
+            echo "prefix=eshop-dev" >> $GITHUB_OUTPUT
+          fi
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -131,14 +148,14 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/eshop-dev-${{ matrix.service.name }}
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ steps.env.outputs.prefix }}-${{ matrix.service.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - uses: docker/build-push-action@v5
         with:
@@ -154,7 +171,7 @@ jobs:
       - uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/eshop-dev-${{ matrix.service.name }}:latest
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ steps.env.outputs.prefix }}-${{ matrix.service.name }}:latest
           format: 'sarif'
           output: 'trivy-image-results.sarif'
 
@@ -167,7 +184,7 @@ jobs:
     name: Deploy to Development
     runs-on: ubuntu-latest
     needs: build-docker-images
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/dev' && github.event_name != 'pull_request'
     environment:
       name: development
       url: ${{ steps.deploy.outputs.alb-url }}
@@ -249,7 +266,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: deploy-dev
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/dev' && github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -272,8 +289,8 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [build-docker-images, integration-tests]
-    if: github.ref == 'refs/heads/main'
+    needs: build-docker-images
+    if: github.ref == 'refs/heads/staging' && github.event_name != 'pull_request'
     environment:
       name: staging
       url: ${{ steps.deploy.outputs.alb-url }}
@@ -290,24 +307,48 @@ jobs:
 
       - id: deploy
         run: |
-          for SERVICE in webapp unified-api; do
+          set -euo pipefail
+
+          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
+            echo "Deploying $SERVICE..."
+
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-staging-$SERVICE --query taskDefinition)
-            NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-staging-$SERVICE:${{ github.sha }}" \
-              '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-            NEW_TASK_ARN=$(echo $NEW_TASK_DEF | jq -r '@json' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --query 'taskDefinition.taskDefinitionArn' --output text)
-            aws ecs update-service \
-              --cluster eshop-staging-cluster \
-              --service eshop-staging-$SERVICE \
-              --task-definition $NEW_TASK_ARN \
-              --force-new-deployment \
-              --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100"
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-staging-$SERVICE:latest" --arg SERVICE_NAME "$SERVICE" \
+              '.containerDefinitions |= map(if .name == $SERVICE_NAME then .image = $IMAGE else . end)
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
+            NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+            aws ecs update-service --cluster eshop-staging-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
           done
+
           ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-staging-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
-      - run: |
-          for SERVICE in webapp unified-api; do
-            aws ecs wait services-stable --cluster eshop-staging-cluster --services eshop-staging-$SERVICE --region ${{ env.AWS_REGION }}
+      - name: Wait for deployment with timeout
+        run: |
+          set -euo pipefail
+
+          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
+            echo "Waiting for $SERVICE..."
+
+            for i in {1..40}; do
+              RUNNING=$(aws ecs describe-services --cluster eshop-staging-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
+              DESIRED=$(aws ecs describe-services --cluster eshop-staging-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
+
+              echo "  $SERVICE: $RUNNING/$DESIRED"
+
+              if [ "$RUNNING" = "$DESIRED" ]; then
+                echo "✓ $SERVICE stable"
+                break
+              fi
+
+              if [ $i -eq 40 ]; then
+                echo "✗ Timeout waiting for $SERVICE"
+                exit 1
+              fi
+
+              sleep 15
+            done
           done
 
       - run: |
@@ -319,8 +360,8 @@ jobs:
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-docker-images
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment:
       name: production
       url: ${{ steps.deploy.outputs.alb-url }}
@@ -337,27 +378,55 @@ jobs:
 
       - id: deploy
         run: |
-          bash infrastructure/scripts/canary-deploy.sh \
-            --cluster eshop-production-cluster \
-            --image-tag ${{ github.sha }} \
-            --registry ${{ steps.login-ecr.outputs.registry }}
-          ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-production-alb --query 'LoadBalancers[0].DNSName' --output text)
+          set -euo pipefail
+
+          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
+            echo "Deploying $SERVICE..."
+
+            TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-prod-$SERVICE --query taskDefinition)
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-prod-$SERVICE:latest" --arg SERVICE_NAME "$SERVICE" \
+              '.containerDefinitions |= map(if .name == $SERVICE_NAME then .image = $IMAGE else . end)
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
+            NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
+            aws ecs update-service --cluster eshop-prod-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
+          done
+
+          ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-prod-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
-      - run: |
-          bash infrastructure/scripts/monitor-deployment.sh \
-            --duration 600 \
-            --threshold 1.0 \
-            --cluster eshop-production-cluster
+      - name: Wait for deployment with timeout
+        run: |
+          set -euo pipefail
 
-      - uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
+            echo "Waiting for $SERVICE..."
+
+            for i in {1..40}; do
+              RUNNING=$(aws ecs describe-services --cluster eshop-prod-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
+              DESIRED=$(aws ecs describe-services --cluster eshop-prod-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
+
+              echo "  $SERVICE: $RUNNING/$DESIRED"
+
+              if [ "$RUNNING" = "$DESIRED" ]; then
+                echo "✓ $SERVICE stable"
+                break
+              fi
+
+              if [ $i -eq 40 ]; then
+                echo "✗ Timeout waiting for $SERVICE"
+                exit 1
+              fi
+
+              sleep 15
+            done
+          done
+
+      - run: |
+          ALB_URL="${{ steps.deploy.outputs.alb-url }}"
+          sleep 30
+          curl -f $ALB_URL/health || exit 1
+          curl -f $ALB_URL/api/health || exit 1
 
   rollback:
     name: Rollback Deployment
