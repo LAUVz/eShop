@@ -77,7 +77,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=ASPNETCORE_URLS="http://+:8081",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__CatalogDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_catalog;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+environment=ASPNETCORE_URLS="http://+:8081",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__CatalogDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_catalog;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 
 [program:basket-api]
 command=dotnet Basket.API.dll
@@ -99,7 +99,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=ASPNETCORE_URLS="http://+:8083",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__OrderingDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_ordering;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+environment=ASPNETCORE_URLS="http://+:8083",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__OrderingDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_ordering;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 
 [program:identity-api]
 command=dotnet Identity.API.dll
@@ -110,7 +110,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=ASPNETCORE_URLS="http://+:8084",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__IdentityDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_identity;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+environment=ASPNETCORE_URLS="http://+:8084",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__IdentityDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_identity;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 
 [program:webhooks-api]
 command=dotnet Webhooks.API.dll
@@ -121,7 +121,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=ASPNETCORE_URLS="http://+:8085",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__WebhooksDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_webhooks;Username=postgres;Password=%(ENV_RDS_PASSWORD)s"
+environment=ASPNETCORE_URLS="http://+:8085",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__WebhooksDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_webhooks;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 EOF
 
 # Expose all API ports
