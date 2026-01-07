@@ -51,7 +51,7 @@ WORKDIR /app
 
 # Install required packages
 RUN apt-get update && \
-    apt-get install -y curl supervisor && \
+    apt-get install -y curl supervisor nginx && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy all published APIs
@@ -61,12 +61,109 @@ COPY --from=publish /app/publish/ordering ./ordering/
 COPY --from=publish /app/publish/identity ./identity/
 COPY --from=publish /app/publish/webhooks ./webhooks/
 
-# Create supervisor configuration to run all APIs with proper logging
+# Create nginx configuration for reverse proxy
+COPY <<EOF /etc/nginx/sites-available/unified-api
+server {
+    listen 8080;
+    server_name _;
+
+    # Identity API - proxy /identity/ to Identity API on port 8084
+    location /identity/ {
+        proxy_pass http://127.0.0.1:8084/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # Catalog API - /api/catalog to port 8081
+    location /api/catalog {
+        proxy_pass http://127.0.0.1:8081/api/catalog;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # Basket API - /api/basket to port 8082
+    location /api/basket {
+        proxy_pass http://127.0.0.1:8082/api/basket;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # Ordering API - /api/orders to port 8083
+    location /api/orders {
+        proxy_pass http://127.0.0.1:8083/api/orders;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # Webhooks API - /api/webhooks to port 8085
+    location /api/webhooks {
+        proxy_pass http://127.0.0.1:8085/api/webhooks;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # Health endpoint - forward to Catalog API
+    location /health {
+        proxy_pass http://127.0.0.1:8081/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    # Default - return 404
+    location / {
+        return 404;
+    }
+}
+EOF
+
+RUN ln -sf /etc/nginx/sites-available/unified-api /etc/nginx/sites-enabled/default
+
+# Create supervisor configuration to run nginx and all APIs
 COPY <<EOF /etc/supervisor/conf.d/apis.conf
 [supervisord]
 nodaemon=true
 user=root
 loglevel=info
+
+[program:nginx]
+command=/usr/sbin/nginx -g 'daemon off;'
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=1
 
 [program:catalog-api]
 command=dotnet Catalog.API.dll
@@ -124,12 +221,12 @@ stderr_logfile_maxbytes=0
 environment=ASPNETCORE_URLS="http://+:8085",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__WebhooksDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_webhooks;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 EOF
 
-# Expose all API ports
-EXPOSE 8081 8082 8083 8084 8085
+# Expose nginx port (8080) - nginx will proxy to internal API ports
+EXPOSE 8080
 
-# Health check
+# Health check - check nginx endpoint
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8081/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 # Set environment variables
 ENV ASPNETCORE_ENVIRONMENT=Development

@@ -51,7 +51,7 @@ locals {
     }
     unified-api = {
       name          = "unified-api"
-      port          = 8081
+      port          = 8080
       cpu           = 512
       memory        = 1024
       desired_count = var.environment == "production" ? 2 : 1
