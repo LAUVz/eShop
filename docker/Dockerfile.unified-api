@@ -64,7 +64,7 @@ COPY --from=publish /app/publish/webhooks ./webhooks/
 # Create nginx configuration for reverse proxy
 COPY <<EOF /etc/nginx/sites-available/unified-api
 server {
-    listen 8080;
+    listen 8081;
     server_name _;
 
     # Identity API - proxy /identity/ to Identity API on port 8084
@@ -80,9 +80,9 @@ server {
         proxy_cache_bypass \$http_upgrade;
     }
 
-    # Catalog API - /api/catalog to port 8081
+    # Catalog API - /api/catalog to port 8091
     location /api/catalog {
-        proxy_pass http://127.0.0.1:8081/api/catalog;
+        proxy_pass http://127.0.0.1:8091/api/catalog;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection keep-alive;
@@ -134,7 +134,7 @@ server {
 
     # Health endpoint - forward to Catalog API
     location /health {
-        proxy_pass http://127.0.0.1:8081/health;
+        proxy_pass http://127.0.0.1:8091/health;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
     }
@@ -174,7 +174,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=ASPNETCORE_URLS="http://+:8081",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__CatalogDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_catalog;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
+environment=ASPNETCORE_URLS="http://+:8091",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__CatalogDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_catalog;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 
 [program:basket-api]
 command=dotnet Basket.API.dll
@@ -221,12 +221,12 @@ stderr_logfile_maxbytes=0
 environment=ASPNETCORE_URLS="http://+:8085",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__WebhooksDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_webhooks;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
 EOF
 
-# Expose nginx port (8080) - nginx will proxy to internal API ports
-EXPOSE 8080
+# Expose nginx port (8081) - nginx will proxy to internal API ports
+EXPOSE 8081
 
 # Health check - check nginx endpoint
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8081/health || exit 1
 
 # Set environment variables
 ENV ASPNETCORE_ENVIRONMENT=Development
