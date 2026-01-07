@@ -123,7 +123,7 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "name=production" >> $GITHUB_OUTPUT
-            echo "prefix=eshop-prod" >> $GITHUB_OUTPUT
+            echo "prefix=eshop-production" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "name=staging" >> $GITHUB_OUTPUT
             echo "prefix=eshop-staging" >> $GITHUB_OUTPUT
@@ -383,16 +383,16 @@ jobs:
           for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
             echo "Deploying $SERVICE..."
 
-            TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-prod-$SERVICE --query taskDefinition)
-            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-prod-$SERVICE:latest" --arg SERVICE_NAME "$SERVICE" \
+            TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-production-$SERVICE --query taskDefinition)
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.login-ecr.outputs.registry }}/eshop-production-$SERVICE:latest" --arg SERVICE_NAME "$SERVICE" \
               '.containerDefinitions |= map(if .name == $SERVICE_NAME then .image = $IMAGE else . end)
               | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
 
             NEW_TASK_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --query 'taskDefinition.taskDefinitionArn' --output text)
-            aws ecs update-service --cluster eshop-prod-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
+            aws ecs update-service --cluster eshop-production-cluster --service $SERVICE --task-definition $NEW_TASK_ARN --force-new-deployment
           done
 
-          ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-prod-alb --query 'LoadBalancers[0].DNSName' --output text)
+          ALB_URL=$(aws elbv2 describe-load-balancers --names eshop-production-alb --query 'LoadBalancers[0].DNSName' --output text)
           echo "alb-url=http://$ALB_URL" >> $GITHUB_OUTPUT
 
       - name: Wait for deployment with timeout
@@ -403,8 +403,8 @@ jobs:
             echo "Waiting for $SERVICE..."
 
             for i in {1..40}; do
-              RUNNING=$(aws ecs describe-services --cluster eshop-prod-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
-              DESIRED=$(aws ecs describe-services --cluster eshop-prod-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
+              RUNNING=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
+              DESIRED=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
 
               echo "  $SERVICE: $RUNNING/$DESIRED"
 
