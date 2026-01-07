@@ -207,7 +207,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=ASPNETCORE_URLS="http://+:8084",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__IdentityDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_identity;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s"
+environment=ASPNETCORE_URLS="http://+:8084",ASPNETCORE_ENVIRONMENT="Development",ConnectionStrings__IdentityDB="Host=%(ENV_RDS_HOST)s;Port=%(ENV_RDS_PORT)s;Database=eshop_identity;Username=eshop_admin;Password=%(ENV_RDS_PASSWORD)s",ASPNETCORE_FORWARDEDHEADERS_ENABLED="%(ENV_ASPNETCORE_FORWARDEDHEADERS_ENABLED)s",IdentityServer__IssuerUri="%(ENV_IdentityServer__IssuerUri)s"
 
 [program:webhooks-api]
 command=dotnet Webhooks.API.dll
