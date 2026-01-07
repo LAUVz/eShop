@@ -132,7 +132,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8081/health || exit 1
 
 # Set environment variables
-ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_ENVIRONMENT=Development
 
 # Run supervisor to manage all APIs
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/apis.conf"]
