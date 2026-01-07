@@ -33,7 +33,9 @@ locals {
       { name = "RDS_PASSWORD", value = var.rds_password },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
       { name = "ASPNETCORE_FORWARDEDHEADERS_ENABLED", value = "true" },
-      { name = "IdentityServer__IssuerUri", value = local.base_url }
+      { name = "ASPNETCORE_URLs", value = "http://+:8081" },
+      { name = "IdentityServer__IssuerUri", value = local.base_url },
+      { name = "IdentityServer__PublicOrigin", value = local.base_url }
     ]
     rabbitmq = []
     payment-processor = [
