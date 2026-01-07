@@ -31,6 +31,7 @@ variable "services" {
     memory        = number
     desired_count = number
     health_check  = string
+    use_alb       = optional(bool, false)
   }))
 }
 
