@@ -13,19 +13,21 @@ locals {
 
   # Use custom app URL if provided, otherwise use ALB DNS name
   base_url = var.app_url != "" ? var.app_url : "http://${var.alb_dns_name}"
+  # Internal URL for service-to-service communication within VPC
+  internal_url = "http://${var.alb_dns_name}"
 
   # Build environment variables for each service
   service_env_vars = {
     webapp = [
-      { name = "IdentityUrl", value = "${local.base_url}/identity" },
+      { name = "IdentityUrl", value = "${local.internal_url}/identity" },
       { name = "CallBackUrl", value = local.base_url },
       { name = "ASPNETCORE_URLS", value = "http://+:8080" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
       # Override service discovery to point to ALB paths
-      { name = "services__catalog-api__http__0", value = local.base_url },
-      { name = "services__catalog-api__https__0", value = local.base_url },
-      { name = "services__basket-api__http__0", value = local.base_url },
-      { name = "services__ordering-api__http__0", value = local.base_url }
+      { name = "services__catalog-api__http__0", value = local.internal_url },
+      { name = "services__catalog-api__https__0", value = local.internal_url },
+      { name = "services__basket-api__http__0", value = local.internal_url },
+      { name = "services__ordering-api__http__0", value = local.internal_url }
     ]
     unified-api = [
       { name = "RDS_HOST", value = local.rds_host },
