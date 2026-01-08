@@ -28,6 +28,12 @@ variable "availability_zones" {
   default     = ["us-east-1a", "us-east-1b"]
 }
 
+variable "app_url" {
+  description = "Public HTTPS URL for the application (e.g., https://eshop.example.com)"
+  type        = string
+  default     = ""
+}
+
 # Database Variables
 variable "rds_master_password" {
   description = "Master password for RDS PostgreSQL"

@@ -13,21 +13,21 @@ locals {
 
   # Use custom app URL if provided, otherwise use ALB DNS name
   base_url = var.app_url != "" ? var.app_url : "http://${var.alb_dns_name}"
-  # Internal URL for service-to-service communication within VPC
-  internal_url = "http://${var.alb_dns_name}"
+  # Service Connect URL for direct container-to-container communication
+  identity_service_url = "http://unified-api:8081"
 
   # Build environment variables for each service
   service_env_vars = {
     webapp = [
-      { name = "IdentityUrl", value = "${local.internal_url}/identity" },
+      { name = "IdentityUrl", value = "${local.identity_service_url}/identity" },
       { name = "CallBackUrl", value = local.base_url },
       { name = "ASPNETCORE_URLS", value = "http://+:8080" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
-      # Override service discovery to point to ALB paths
-      { name = "services__catalog-api__http__0", value = local.internal_url },
-      { name = "services__catalog-api__https__0", value = local.internal_url },
-      { name = "services__basket-api__http__0", value = local.internal_url },
-      { name = "services__ordering-api__http__0", value = local.internal_url }
+      # Use Service Connect for API communication
+      { name = "services__catalog-api__http__0", value = "http://unified-api:8081" },
+      { name = "services__catalog-api__https__0", value = "http://unified-api:8081" },
+      { name = "services__basket-api__http__0", value = "http://unified-api:8081" },
+      { name = "services__ordering-api__http__0", value = "http://unified-api:8081" }
     ]
     unified-api = [
       { name = "RDS_HOST", value = local.rds_host },
@@ -51,6 +51,11 @@ locals {
 
 resource "aws_ecs_cluster" "main" {
   name = "${var.name_prefix}-cluster"
+
+  service_connect_defaults {
+    namespace = aws_service_discovery_private_dns_namespace.main.arn
+  }
+
   tags = var.tags
 }
 
@@ -79,6 +84,7 @@ resource "aws_ecs_task_definition" "service" {
     name  = each.key
     image = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder - updated by CI/CD
     portMappings = [{
+      name          = "app"
       containerPort = each.value.port
       protocol      = "tcp"
     }]
@@ -134,6 +140,29 @@ resource "aws_ecs_service" "service" {
       registry_arn = aws_service_discovery_service.rabbitmq[0].arn
     }
   }
+
+  # Enable Service Connect for webapp and unified-api
+  # TEMPORARILY DISABLED - requires CI/CD pipeline to create task definitions with named ports
+  # dynamic "service_connect_configuration" {
+  #   for_each = contains(["webapp", "unified-api"], each.key) ? [1] : []
+  #   content {
+  #     enabled = true
+  #
+  #     # unified-api registers as a service that others can discover
+  #     dynamic "service" {
+  #       for_each = each.key == "unified-api" ? [1] : []
+  #       content {
+  #         port_name      = "app"
+  #         discovery_name = "unified-api"
+  #
+  #         client_alias {
+  #           port     = each.value.port
+  #           dns_name = "unified-api"
+  #         }
+  #       }
+  #     }
+  #   }
+  # }
 
   # Ignore changes to task_definition - it's updated by CI/CD pipeline
   # but preserve load balancer config which is immutable
