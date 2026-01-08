@@ -36,11 +36,40 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main["webapp"].arn
+  }
+}
+
+# HTTP listener rules for routing
+resource "aws_lb_listener_rule" "http_identity_api" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main["unified-api"].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/identity/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "http_api" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 101
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.main["unified-api"].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
     }
   }
 }

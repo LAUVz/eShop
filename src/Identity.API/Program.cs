@@ -17,7 +17,13 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 
 builder.Services.AddIdentityServer(options =>
 {
-    //options.IssuerUri = "null";
+    // Set the issuer URI from configuration (required for proper OIDC discovery)
+    var issuerUri = builder.Configuration["IdentityServer:IssuerUri"];
+    if (!string.IsNullOrEmpty(issuerUri))
+    {
+        options.IssuerUri = issuerUri;
+    }
+
     options.Authentication.CookieLifetime = TimeSpan.FromHours(2);
 
     options.Events.RaiseErrorEvents = true;
