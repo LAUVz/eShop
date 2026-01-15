@@ -13,21 +13,22 @@ locals {
 
   # Use custom app URL if provided, otherwise use ALB DNS name
   base_url = var.app_url != "" ? var.app_url : "http://${var.alb_dns_name}"
-  # Service Connect URL for direct container-to-container communication
-  identity_service_url = "http://unified-api:8081"
+  # Use ALB URL for internal Identity Server communication
+  # In private subnets, containers can reach ALB via internal DNS
+  identity_url = "${local.base_url}/identity"
 
   # Build environment variables for each service
   service_env_vars = {
     webapp = [
-      { name = "IdentityUrl", value = "${local.identity_service_url}/identity" },
+      { name = "IdentityUrl", value = local.identity_url },
       { name = "CallBackUrl", value = local.base_url },
       { name = "ASPNETCORE_URLS", value = "http://+:8080" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
-      # Use Service Connect for API communication
-      { name = "services__catalog-api__http__0", value = "http://unified-api:8081" },
-      { name = "services__catalog-api__https__0", value = "http://unified-api:8081" },
-      { name = "services__basket-api__http__0", value = "http://unified-api:8081" },
-      { name = "services__ordering-api__http__0", value = "http://unified-api:8081" }
+      # Use ALB for API communication (works in private subnets)
+      { name = "services__catalog-api__http__0", value = local.base_url },
+      { name = "services__catalog-api__https__0", value = local.base_url },
+      { name = "services__basket-api__http__0", value = local.base_url },
+      { name = "services__ordering-api__http__0", value = local.base_url }
     ]
     unified-api = [
       { name = "RDS_HOST", value = local.rds_host },
@@ -51,10 +52,6 @@ locals {
 
 resource "aws_ecs_cluster" "main" {
   name = "${var.name_prefix}-cluster"
-
-  service_connect_defaults {
-    namespace = aws_service_discovery_private_dns_namespace.main.arn
-  }
 
   tags = var.tags
 }
@@ -84,7 +81,6 @@ resource "aws_ecs_task_definition" "service" {
     name  = each.key
     image = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder - updated by CI/CD
     portMappings = [{
-      name          = "app"
       containerPort = each.value.port
       protocol      = "tcp"
     }]
@@ -118,9 +114,9 @@ resource "aws_ecs_service" "service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = var.public_subnet_ids
+    subnets          = var.private_app_subnet_ids
     security_groups  = [var.ecs_security_group_id]
-    assign_public_ip = true
+    assign_public_ip = false
   }
 
   # Only add load balancer for web services (use_alb = true)

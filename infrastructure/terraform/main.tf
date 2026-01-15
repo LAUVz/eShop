@@ -137,7 +137,7 @@ module "alb" {
   vpc_id              = module.vpc.vpc_id
   public_subnet_ids   = module.vpc.public_subnet_ids
   security_group_ids  = [module.security_groups.alb_security_group_id]
-  certificate_arn     = "arn:aws:acm:eu-west-3:894426806671:certificate/4286ab2b-5f14-44ed-a75a-ed0ee2dd5853"
+  certificate_arn     = "arn:aws:acm:eu-west-3:424571028400:certificate/4286ab2b-5f14-44ed-a75a-ed0ee2dd5853"
 
   tags = local.common_tags
 }
@@ -158,7 +158,8 @@ module "ecs" {
 
   name_prefix            = local.name_prefix
   vpc_id                 = module.vpc.vpc_id
-  public_subnet_ids      = module.vpc.public_subnet_ids  # COST-OPTIMIZATION: Public subnets (no NAT Gateway)
+  public_subnet_ids      = module.vpc.public_subnet_ids
+  private_app_subnet_ids = module.vpc.private_app_subnet_ids  # ECS tasks run in private subnets
   ecs_security_group_id  = module.security_groups.ecs_security_group_id
   alb_target_group_arns  = module.alb.target_group_arns
   alb_dns_name           = module.alb.alb_dns_name

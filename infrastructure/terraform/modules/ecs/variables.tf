@@ -10,6 +10,11 @@ variable "public_subnet_ids" {
   type = list(string)
 }
 
+variable "private_app_subnet_ids" {
+  type        = list(string)
+  description = "Private subnet IDs for ECS tasks"
+}
+
 variable "ecs_security_group_id" {
   type = string
 }
