@@ -403,12 +403,21 @@ jobs:
             echo "Waiting for $SERVICE..."
 
             for i in {1..40}; do
+              # Get detailed deployment info
+              DEPLOYMENTS=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].deployments[*].[status,runningCount,desiredCount]' --output json)
+              PRIMARY=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.[0] == "PRIMARY") | "\(.[1])/\(.[2])"')
+              ACTIVE=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.[0] == "ACTIVE") | "\(.[1])/\(.[2])"' | head -1)
+
               RUNNING=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
               DESIRED=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
 
-              echo "  $SERVICE: $RUNNING/$DESIRED"
+              if [ -n "$ACTIVE" ]; then
+                echo "  $SERVICE: NEW: $PRIMARY | OLD: $ACTIVE | TOTAL: $RUNNING/$DESIRED"
+              else
+                echo "  $SERVICE: $RUNNING/$DESIRED"
+              fi
 
-              if [ "$RUNNING" = "$DESIRED" ]; then
+              if [ "$RUNNING" = "$DESIRED" ] && [ -z "$ACTIVE" ]; then
                 echo "✓ $SERVICE stable"
                 break
               fi
