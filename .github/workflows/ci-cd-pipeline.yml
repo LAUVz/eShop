@@ -402,28 +402,30 @@ jobs:
           for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
             echo "Waiting for $SERVICE..."
 
-            for i in {1..40}; do
-              # Get detailed deployment info
-              DEPLOYMENTS=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].deployments[*].[status,runningCount,desiredCount]' --output json)
-              PRIMARY=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.[0] == "PRIMARY") | "\(.[1])/\(.[2])"')
-              ACTIVE=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.[0] == "ACTIVE") | "\(.[1])/\(.[2])"' | head -1)
+            for i in {1..60}; do
+              # Get service-level counts
+              SERVICE_INFO=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].[runningCount,desiredCount,deployments]' --output json)
+              RUNNING=$(echo "$SERVICE_INFO" | jq -r '.[0]')
+              DESIRED=$(echo "$SERVICE_INFO" | jq -r '.[1]')
 
-              RUNNING=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].runningCount' --output text)
-              DESIRED=$(aws ecs describe-services --cluster eshop-production-cluster --services $SERVICE --query 'services[0].desiredCount' --output text)
+              # Get deployment-specific running counts
+              DEPLOYMENTS=$(echo "$SERVICE_INFO" | jq -r '.[2]')
+              PRIMARY_RUNNING=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.status == "PRIMARY") | .runningCount')
+              ACTIVE_RUNNING=$(echo "$DEPLOYMENTS" | jq -r '.[] | select(.status == "ACTIVE") | .runningCount' | head -1)
 
-              if [ -n "$ACTIVE" ]; then
-                echo "  $SERVICE: NEW: $PRIMARY | OLD: $ACTIVE | TOTAL: $RUNNING/$DESIRED"
+              if [ -n "$ACTIVE_RUNNING" ] && [ "$ACTIVE_RUNNING" != "null" ]; then
+                echo "  $SERVICE: NEW: $PRIMARY_RUNNING/$DESIRED | OLD: $ACTIVE_RUNNING | TOTAL: $RUNNING/$DESIRED"
               else
                 echo "  $SERVICE: $RUNNING/$DESIRED"
               fi
 
-              if [ "$RUNNING" = "$DESIRED" ] && [ -z "$ACTIVE" ]; then
+              if [ "$RUNNING" = "$DESIRED" ] && ([ -z "$ACTIVE_RUNNING" ] || [ "$ACTIVE_RUNNING" = "null" ]); then
                 echo "✓ $SERVICE stable"
                 break
               fi
 
-              if [ $i -eq 40 ]; then
-                echo "✗ Timeout waiting for $SERVICE"
+              if [ $i -eq 60 ]; then
+                echo "✗ Timeout waiting for $SERVICE after 15 minutes"
                 exit 1
               fi
 
