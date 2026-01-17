@@ -13,36 +13,91 @@ locals {
 
   # Use custom app URL if provided, otherwise use ALB DNS name
   base_url = var.app_url != "" ? var.app_url : "http://${var.alb_dns_name}"
-  # Use ALB URL for internal Identity Server communication
-  # In private subnets, containers can reach ALB via internal DNS
-  identity_url = "${local.base_url}/identity"
 
-  # Build environment variables for each service
+  # Identity Server URL - NO /identity prefix needed! ALB routes to it directly
+  identity_url = local.base_url
+
+  # Build environment variables for each service (matching .NET Aspire AppHost configuration)
   service_env_vars = {
+    # WebApp - main UI
     webapp = [
       { name = "IdentityUrl", value = local.identity_url },
       { name = "CallBackUrl", value = local.base_url },
       { name = "ASPNETCORE_URLS", value = "http://+:8080" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
-      # Use ALB for API communication (works in private subnets)
+      # API endpoints - all via ALB
       { name = "services__catalog-api__http__0", value = local.base_url },
       { name = "services__catalog-api__https__0", value = local.base_url },
       { name = "services__basket-api__http__0", value = local.base_url },
       { name = "services__ordering-api__http__0", value = local.base_url }
     ]
-    unified-api = [
+
+    # Identity API - authentication & authorization
+    identity-api = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8081" },
+      { name = "ASPNETCORE_FORWARDEDHEADERS_ENABLED", value = "true" },
       { name = "RDS_HOST", value = local.rds_host },
       { name = "RDS_PORT", value = local.rds_port },
       { name = "RDS_PASSWORD", value = var.rds_password },
-      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
-      { name = "ASPNETCORE_FORWARDEDHEADERS_ENABLED", value = "true" },
-      { name = "IdentityServer__IssuerUri", value = local.identity_url }
+      { name = "ConnectionStrings__IdentityDB", value = "Host=${local.rds_host};Port=${local.rds_port};Database=eshop_identity;Username=eshop_admin;Password=${var.rds_password}" },
+      { name = "IdentityServer__IssuerUri", value = local.identity_url },
+      # Client callback URLs
+      { name = "BasketApiClient", value = "${local.base_url}" },
+      { name = "OrderingApiClient", value = "${local.base_url}" },
+      { name = "WebhooksApiClient", value = "${local.base_url}" },
+      { name = "WebAppClient", value = local.base_url }
     ]
-    rabbitmq = []
+
+    # Catalog API - product catalog
+    catalog-api = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8082" },
+      { name = "RDS_HOST", value = local.rds_host },
+      { name = "RDS_PORT", value = local.rds_port },
+      { name = "RDS_PASSWORD", value = var.rds_password },
+      { name = "ConnectionStrings__CatalogDB", value = "Host=${local.rds_host};Port=${local.rds_port};Database=eshop_catalog;Username=eshop_admin;Password=${var.rds_password}" },
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
+    ]
+
+    # Basket API - shopping cart
+    basket-api = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8083" },
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
+      { name = "Identity__Url", value = local.identity_url }
+    ]
+
+    # Ordering API - order management
+    ordering-api = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8084" },
+      { name = "RDS_HOST", value = local.rds_host },
+      { name = "RDS_PORT", value = local.rds_port },
+      { name = "RDS_PASSWORD", value = var.rds_password },
+      { name = "ConnectionStrings__OrderingDB", value = "Host=${local.rds_host};Port=${local.rds_port};Database=eshop_ordering;Username=eshop_admin;Password=${var.rds_password}" },
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
+      { name = "Identity__Url", value = local.identity_url }
+    ]
+
+    # Webhooks API - webhook management
+    webhooks-api = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8085" },
+      { name = "RDS_HOST", value = local.rds_host },
+      { name = "RDS_PORT", value = local.rds_port },
+      { name = "RDS_PASSWORD", value = var.rds_password },
+      { name = "ConnectionStrings__WebhooksDB", value = "Host=${local.rds_host};Port=${local.rds_port};Database=eshop_webhooks;Username=eshop_admin;Password=${var.rds_password}" },
+      { name = "ConnectionStrings__EventBus", value = local.eventbus_connection },
+      { name = "Identity__Url", value = local.identity_url }
+    ]
+
+    # Worker services
     payment-processor = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8086" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
     ]
     order-processor = [
+      { name = "ASPNETCORE_URLS", value = "http://+:8087" },
+      { name = "RDS_HOST", value = local.rds_host },
+      { name = "RDS_PORT", value = local.rds_port },
+      { name = "RDS_PASSWORD", value = var.rds_password },
+      { name = "ConnectionStrings__OrderingDB", value = "Host=${local.rds_host};Port=${local.rds_port};Database=eshop_ordering;Username=eshop_admin;Password=${var.rds_password}" },
       { name = "ConnectionStrings__EventBus", value = local.eventbus_connection }
     ]
   }

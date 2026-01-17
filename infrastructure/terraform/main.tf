@@ -38,7 +38,7 @@ locals {
     ManagedBy   = "Terraform"
   }
 
-  # Web services (with load balancer)
+  # Web services (with load balancer) - matches .NET Aspire AppHost architecture
   web_services = {
     webapp = {
       name          = "webapp"
@@ -49,27 +49,50 @@ locals {
       health_check  = "/health"
       use_alb       = true
     }
-    unified-api = {
-      name          = "unified-api"
+    identity-api = {
+      name          = "identity-api"
       port          = 8081
-      cpu           = 512
-      memory        = 1024
+      cpu           = 256
+      memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
       health_check  = "/health"
       use_alb       = true
     }
-  }
-
-  # Infrastructure services (no load balancer)
-  infrastructure_services = {
-    rabbitmq = {
-      name          = "rabbitmq"
-      port          = 5672
+    catalog-api = {
+      name          = "catalog-api"
+      port          = 8082
       cpu           = 256
       memory        = 512
-      desired_count = 1
+      desired_count = var.environment == "production" ? 2 : 1
       health_check  = "/health"
-      use_alb       = false
+      use_alb       = true
+    }
+    basket-api = {
+      name          = "basket-api"
+      port          = 8083
+      cpu           = 256
+      memory        = 512
+      desired_count = var.environment == "production" ? 2 : 1
+      health_check  = "/health"
+      use_alb       = true
+    }
+    ordering-api = {
+      name          = "ordering-api"
+      port          = 8084
+      cpu           = 256
+      memory        = 512
+      desired_count = var.environment == "production" ? 2 : 1
+      health_check  = "/health"
+      use_alb       = true
+    }
+    webhooks-api = {
+      name          = "webhooks-api"
+      port          = 8085
+      cpu           = 256
+      memory        = 512
+      desired_count = var.environment == "production" ? 2 : 1
+      health_check  = "/health"
+      use_alb       = true
     }
   }
 
@@ -77,7 +100,7 @@ locals {
   worker_services = {
     payment-processor = {
       name          = "payment-processor"
-      port          = 8082
+      port          = 8086
       cpu           = 256
       memory        = 512
       desired_count = 1
@@ -86,7 +109,7 @@ locals {
     }
     order-processor = {
       name          = "order-processor"
-      port          = 8083
+      port          = 8087
       cpu           = 256
       memory        = 512
       desired_count = 1
@@ -96,7 +119,7 @@ locals {
   }
 
   # All services combined
-  services = merge(local.web_services, local.infrastructure_services, local.worker_services)
+  services = merge(local.web_services, local.worker_services)
 
   # All services for ECR repositories
   all_services = keys(local.services)
@@ -138,6 +161,7 @@ module "alb" {
   public_subnet_ids   = module.vpc.public_subnet_ids
   security_group_ids  = [module.security_groups.alb_security_group_id]
   certificate_arn     = "arn:aws:acm:eu-west-3:424571028400:certificate/4286ab2b-5f14-44ed-a75a-ed0ee2dd5853"
+  services            = local.web_services  # Only web services use ALB
 
   tags = local.common_tags
 }
