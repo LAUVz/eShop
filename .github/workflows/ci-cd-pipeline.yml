@@ -103,17 +103,26 @@ jobs:
           - name: webapp
             dockerfile: docker/Dockerfile.webapp
             context: .
-          - name: unified-api
-            dockerfile: docker/Dockerfile.unified-api
+          - name: identity-api
+            dockerfile: docker/Dockerfile.identity-api
+            context: .
+          - name: catalog-api
+            dockerfile: docker/Dockerfile.catalog-api
+            context: .
+          - name: basket-api
+            dockerfile: docker/Dockerfile.basket-api
+            context: .
+          - name: ordering-api
+            dockerfile: docker/Dockerfile.ordering-api
+            context: .
+          - name: webhooks-api
+            dockerfile: docker/Dockerfile.webhooks-api
             context: .
           - name: payment-processor
             dockerfile: docker/Dockerfile.payment-processor
             context: .
           - name: order-processor
             dockerfile: docker/Dockerfile.order-processor
-            context: .
-          - name: rabbitmq
-            dockerfile: docker/Dockerfile.rabbitmq
             context: .
     steps:
       - uses: actions/checkout@v4
@@ -380,7 +389,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
+          for SERVICE in webapp identity-api catalog-api basket-api ordering-api webhooks-api payment-processor order-processor; do
             echo "Deploying $SERVICE..."
 
             TASK_DEF=$(aws ecs describe-task-definition --task-definition eshop-production-$SERVICE --query taskDefinition)
@@ -400,7 +409,7 @@ jobs:
           set -euo pipefail
 
           # Only wait for services with ALB health checks (not background workers)
-          for SERVICE in rabbitmq webapp unified-api; do
+          for SERVICE in webapp identity-api catalog-api basket-api ordering-api webhooks-api; do
             echo "Waiting for $SERVICE..."
 
             for i in {1..60}; do
