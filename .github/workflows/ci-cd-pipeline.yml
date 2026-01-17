@@ -399,7 +399,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          for SERVICE in rabbitmq webapp unified-api payment-processor order-processor; do
+          # Only wait for services with ALB health checks (not background workers)
+          for SERVICE in rabbitmq webapp unified-api; do
             echo "Waiting for $SERVICE..."
 
             for i in {1..60}; do
