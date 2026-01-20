@@ -4,9 +4,6 @@ WORKDIR /src
 # Copy ALL source first to avoid missing project references
 COPY . .
 
-# Remove global.json to allow Docker SDK version flexibility
-RUN rm -f global.json
-
 # Restore and build
 WORKDIR "/src/src/Basket.API"
 RUN dotnet restore "Basket.API.csproj"
