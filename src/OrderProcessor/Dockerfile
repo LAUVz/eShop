@@ -3,6 +3,8 @@ WORKDIR /src
 
 # Copy Directory.*.props files for central package management
 COPY ["Directory.Build.props", "./"]
+COPY ["Directory.Build.targets", "./"]
+COPY ["Directory.Packages.props", "./"]
 
 # Copy solution and project files
 COPY ["src/OrderProcessor/OrderProcessor.csproj", "src/OrderProcessor/"]
