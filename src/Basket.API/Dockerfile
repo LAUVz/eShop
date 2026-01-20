@@ -7,7 +7,7 @@ COPY . .
 # Restore and build
 WORKDIR "/src/src/Basket.API"
 RUN dotnet restore "Basket.API.csproj"
-RUN dotnet publish "Basket.API.csproj" -c Release -o /app/publish
+RUN dotnet publish "Basket.API.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview

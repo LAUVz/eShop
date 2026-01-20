@@ -7,7 +7,7 @@ COPY . .
 # Restore and build
 WORKDIR "/src/src/Ordering.API"
 RUN dotnet restore "Ordering.API.csproj"
-RUN dotnet publish "Ordering.API.csproj" -c Release -o /app/publish
+RUN dotnet publish "Ordering.API.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview

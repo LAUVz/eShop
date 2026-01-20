@@ -7,7 +7,7 @@ COPY . .
 # Restore and build
 WORKDIR "/src/src/Webhooks.API"
 RUN dotnet restore "Webhooks.API.csproj"
-RUN dotnet publish "Webhooks.API.csproj" -c Release -o /app/publish
+RUN dotnet publish "Webhooks.API.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview

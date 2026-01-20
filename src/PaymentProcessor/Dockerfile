@@ -7,7 +7,7 @@ COPY . .
 # Restore and build
 WORKDIR "/src/src/PaymentProcessor"
 RUN dotnet restore "PaymentProcessor.csproj"
-RUN dotnet publish "PaymentProcessor.csproj" -c Release -o /app/publish
+RUN dotnet publish "PaymentProcessor.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview

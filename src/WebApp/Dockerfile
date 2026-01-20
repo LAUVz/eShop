@@ -7,7 +7,7 @@ COPY . .
 # Restore and build
 WORKDIR "/src/src/WebApp"
 RUN dotnet restore "WebApp.csproj"
-RUN dotnet publish "WebApp.csproj" -c Release -o /app/publish
+RUN dotnet publish "WebApp.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview

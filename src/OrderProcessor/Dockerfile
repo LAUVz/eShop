@@ -7,7 +7,7 @@ COPY . .
 # Restore and build
 WORKDIR "/src/src/OrderProcessor"
 RUN dotnet restore "OrderProcessor.csproj"
-RUN dotnet publish "OrderProcessor.csproj" -c Release -o /app/publish
+RUN dotnet publish "OrderProcessor.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview
