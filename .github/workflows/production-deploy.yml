@@ -12,7 +12,7 @@ on:
 env:
   AWS_REGION: eu-west-3
   ENVIRONMENT: production
-  ECS_CLUSTER: eshop-production
+  ECS_CLUSTER: eshop-production-cluster
 
 jobs:
   # Job 1: Build and Test
@@ -128,7 +128,20 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Check if infrastructure exists
+        id: check-infra
+        run: |
+          # Check if ECS cluster exists
+          if aws ecs describe-clusters --clusters ${{ env.ECS_CLUSTER }} --query 'clusters[0].status' --output text 2>/dev/null | grep -q "ACTIVE"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ ECS cluster exists, proceeding with deployment"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ ECS cluster does not exist. Run 'terraform apply' first to create infrastructure."
+          fi
+
       - name: Get ALB DNS name
+        if: steps.check-infra.outputs.exists == 'true'
         id: alb
         run: |
           ALB_DNS=$(aws elbv2 describe-load-balancers \
@@ -139,6 +152,7 @@ jobs:
           echo "ALB DNS: $ALB_DNS"
 
       - name: Update ECS multi-container service
+        if: steps.check-infra.outputs.exists == 'true'
         env:
           IMAGE_TAG: ${{ needs.build-test.outputs.image_tag }}
         run: |
@@ -155,6 +169,7 @@ jobs:
           echo "✅ Deployment triggered for all containers in single task"
 
       - name: Wait for service to stabilize
+        if: steps.check-infra.outputs.exists == 'true'
         run: |
           echo "Waiting for eshop-${{ env.ENVIRONMENT }}-app service to stabilize..."
 
@@ -169,6 +184,7 @@ jobs:
           echo "✅ Multi-container service is stable (all 8 containers running)"
 
       - name: Health Checks
+        if: steps.check-infra.outputs.exists == 'true'
         run: |
           ALB_DNS="${{ steps.alb.outputs.dns_name }}"
 
@@ -187,7 +203,7 @@ jobs:
           exit 1
 
       - name: Smoke Tests
-        if: success()
+        if: success() && steps.check-infra.outputs.exists == 'true'
         run: |
           ALB_DNS="${{ steps.alb.outputs.dns_name }}"
 
@@ -200,7 +216,7 @@ jobs:
           echo "✅ Smoke tests passed!"
 
       - name: Rollback on Failure
-        if: failure()
+        if: failure() && steps.check-infra.outputs.exists == 'true'
         run: |
           echo "⚠️ Deployment failed, rolling back multi-container service..."
 
@@ -215,7 +231,7 @@ jobs:
           echo "✅ Rollback initiated for all containers"
 
       - name: Get deployment URL
-        if: success()
+        if: success() && steps.check-infra.outputs.exists == 'true'
         run: |
           ALB_DNS="${{ steps.alb.outputs.dns_name }}"
           echo "🚀 Application URL: https://${ALB_DNS}"
