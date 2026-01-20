@@ -10,6 +10,8 @@
     <!-- Temporarily disable security warnings for transitive packages. -->
     <!-- NU1603: Disable SDK version mismatch warnings for Docker builds with nightly SDK -->
     <NoWarn>NU1901;NU1902;NU1903;NU1904;NU1603</NoWarn>
+    <!-- Disable OpenAPI document generation during build to avoid SDK version issues -->
+    <GenerateOpenApiDocument>false</GenerateOpenApiDocument>
   </PropertyGroup>
 
   <!-- Enable OpenAI OpenTelemetry so OpenAI calls participate in tracing and metrics. -->
