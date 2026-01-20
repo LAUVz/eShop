@@ -172,16 +172,108 @@ jobs:
         if: steps.check-infra.outputs.exists == 'true'
         run: |
           echo "Waiting for eshop-${{ env.ENVIRONMENT }}-app service to stabilize..."
+          echo "This may take 5-10 minutes for the multi-container task to start..."
+          echo ""
 
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services eshop-${{ env.ENVIRONMENT }}-app \
-            --no-cli-pager || {
-              echo "⚠️ Service failed to stabilize"
+          # Monitor service status with detailed output
+          for i in {1..60}; do
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "⏱️  Check $i/60 (waiting 20 seconds between checks)"
+            echo ""
+
+            # Get service details
+            SERVICE_INFO=$(aws ecs describe-services \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --services eshop-${{ env.ENVIRONMENT }}-app \
+              --no-cli-pager 2>&1)
+
+            RUNNING_COUNT=$(echo "$SERVICE_INFO" | jq -r '.services[0].runningCount // 0')
+            DESIRED_COUNT=$(echo "$SERVICE_INFO" | jq -r '.services[0].desiredCount // 0')
+            PENDING_COUNT=$(echo "$SERVICE_INFO" | jq -r '.services[0].pendingCount // 0')
+
+            echo "📊 Service Status:"
+            echo "   Desired: $DESIRED_COUNT"
+            echo "   Running: $RUNNING_COUNT"
+            echo "   Pending: $PENDING_COUNT"
+            echo ""
+
+            # Get task details
+            TASK_ARNS=$(aws ecs list-tasks \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service-name eshop-${{ env.ENVIRONMENT }}-app \
+              --query 'taskArns[]' \
+              --output text)
+
+            if [ -n "$TASK_ARNS" ]; then
+              echo "🔍 Task Details:"
+              TASK_INFO=$(aws ecs describe-tasks \
+                --cluster ${{ env.ECS_CLUSTER }} \
+                --tasks $TASK_ARNS \
+                --no-cli-pager)
+
+              echo "$TASK_INFO" | jq -r '.tasks[] | "   Task: \(.taskArn | split("/") | .[-1])\n   Status: \(.lastStatus)\n   Health: \(.healthStatus // "UNKNOWN")\n   Desired: \(.desiredStatus)"'
+              echo ""
+
+              # Check for stopped tasks and show reason
+              STOPPED_REASON=$(echo "$TASK_INFO" | jq -r '.tasks[] | select(.lastStatus == "STOPPED") | .stoppedReason // "Unknown"')
+              if [ -n "$STOPPED_REASON" ]; then
+                echo "⚠️  Stopped Task Reason: $STOPPED_REASON"
+              fi
+
+              # Show container statuses
+              echo "📦 Container Statuses:"
+              echo "$TASK_INFO" | jq -r '.tasks[0].containers[] | "   \(.name): \(.lastStatus) (health: \(.healthStatus // "N/A"))"'
+            else
+              echo "⏳ No tasks found yet..."
+            fi
+            echo ""
+
+            # Check for deployment events (last 5)
+            echo "📋 Recent Events:"
+            echo "$SERVICE_INFO" | jq -r '.services[0].events[:5][] | "   [\(.createdAt)] \(.message)"'
+            echo ""
+
+            # Check if stable
+            if [ "$RUNNING_COUNT" -eq "$DESIRED_COUNT" ] && [ "$PENDING_COUNT" -eq "0" ] && [ "$RUNNING_COUNT" -gt "0" ]; then
+              echo "✅ Service is stable! ($RUNNING_COUNT/$DESIRED_COUNT tasks running)"
+              exit 0
+            fi
+
+            # Check if deployment is failing
+            FAILED_TASKS=$(aws ecs list-tasks \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service-name eshop-${{ env.ENVIRONMENT }}-app \
+              --desired-status STOPPED \
+              --query 'taskArns | length(@)' \
+              --output text)
+
+            if [ "$FAILED_TASKS" -gt 5 ]; then
+              echo "❌ Too many failed tasks ($FAILED_TASKS). Deployment likely failing."
+              echo ""
+              echo "🔍 Checking stopped task details..."
+              STOPPED_TASK_ARN=$(aws ecs list-tasks \
+                --cluster ${{ env.ECS_CLUSTER }} \
+                --service-name eshop-${{ env.ENVIRONMENT }}-app \
+                --desired-status STOPPED \
+                --max-items 1 \
+                --query 'taskArns[0]' \
+                --output text)
+
+              if [ -n "$STOPPED_TASK_ARN" ]; then
+                aws ecs describe-tasks \
+                  --cluster ${{ env.ECS_CLUSTER }} \
+                  --tasks "$STOPPED_TASK_ARN" \
+                  --query 'tasks[0].[stoppedReason,containers[].reason]' \
+                  --output text
+              fi
               exit 1
-            }
+            fi
 
-          echo "✅ Multi-container service is stable (all 8 containers running)"
+            sleep 20
+          done
+
+          echo "❌ Timeout: Service failed to stabilize after 20 minutes"
+          exit 1
 
       - name: Health Checks
         if: steps.check-infra.outputs.exists == 'true'
