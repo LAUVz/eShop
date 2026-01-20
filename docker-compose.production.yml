@@ -1,0 +1,276 @@
+version: '3.8'
+
+# Production-Grade eShop Deployment
+# Optimized for t3a.medium (4GB RAM) - $30/month
+# Suitable for 200-500 concurrent users
+
+services:
+  # PostgreSQL Database (consolidated - one instance, multiple databases)
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: eshop-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMeInProduction!}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - eshop-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 1g
+    mem_reservation: 512m
+    cpus: 1.0
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: eshop-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - eshop-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    mem_limit: 256m
+    cpus: 0.5
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: eshop-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ChangeMeInProduction!}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - eshop-network
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    mem_limit: 512m
+    cpus: 0.5
+
+  # Identity API
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/Identity.API/Dockerfile
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:identity-${IMAGE_TAG:-latest}
+    container_name: eshop-identity-api
+    restart: unless-stopped
+    ports:
+      - "5105:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - ConnectionStrings__identitydb=Host=postgres;Database=identitydb;Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-ChangeMeInProduction!}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - eshop-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    mem_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Catalog API
+  catalog-api:
+    build:
+      context: .
+      dockerfile: src/Catalog.API/Dockerfile
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:catalog-${IMAGE_TAG:-latest}
+    container_name: eshop-catalog-api
+    restart: unless-stopped
+    ports:
+      - "5101:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - ConnectionStrings__catalogdb=Host=postgres;Database=catalogdb;Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-ChangeMeInProduction!}
+      - ConnectionStrings__eventbus=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-ChangeMeInProduction!}@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - eshop-network
+    mem_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Basket API
+  basket-api:
+    build:
+      context: .
+      dockerfile: src/Basket.API/Dockerfile
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:basket-${IMAGE_TAG:-latest}
+    container_name: eshop-basket-api
+    restart: unless-stopped
+    ports:
+      - "5103:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - ConnectionStrings__redis=redis:6379
+      - ConnectionStrings__eventbus=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-ChangeMeInProduction!}@rabbitmq:5672
+      - Identity__Url=http://identity-api:8080
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      identity-api:
+        condition: service_healthy
+    networks:
+      - eshop-network
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Ordering API
+  ordering-api:
+    build:
+      context: .
+      dockerfile: src/Ordering.API/Dockerfile
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:ordering-${IMAGE_TAG:-latest}
+    container_name: eshop-ordering-api
+    restart: unless-stopped
+    ports:
+      - "5102:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - ConnectionStrings__orderingdb=Host=postgres;Database=orderingdb;Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-ChangeMeInProduction!}
+      - ConnectionStrings__eventbus=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-ChangeMeInProduction!}@rabbitmq:5672
+      - Identity__Url=http://identity-api:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      identity-api:
+        condition: service_healthy
+    networks:
+      - eshop-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    mem_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # WebApp (Frontend)
+  webapp:
+    build:
+      context: .
+      dockerfile: src/WebApp/Dockerfile
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:webapp-${IMAGE_TAG:-latest}
+    container_name: eshop-webapp
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+      - "443:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080;https://+:8081
+      - ASPNETCORE_HTTPS_PORT=443
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - services__basket-api__http__0=http://basket-api:8080
+      - services__catalog-api__http__0=http://catalog-api:8080
+      - services__ordering-api__http__0=http://ordering-api:8080
+      - ConnectionStrings__eventbus=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-ChangeMeInProduction!}@rabbitmq:5672
+      - IdentityUrl=http://identity-api:8080
+      - CallBackUrl=${WEBAPP_CALLBACK_URL:-http://localhost}
+    depends_on:
+      basket-api:
+        condition: service_started
+      catalog-api:
+        condition: service_started
+      ordering-api:
+        condition: service_healthy
+      identity-api:
+        condition: service_healthy
+    networks:
+      - eshop-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    mem_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  eshop-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  rabbitmq-data:
+    driver: local

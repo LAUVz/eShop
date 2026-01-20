@@ -134,8 +134,8 @@ module "vpc" {
   name_prefix         = local.name_prefix
   vpc_cidr            = var.vpc_cidr
   availability_zones  = var.availability_zones
-  enable_nat_gateway  = true
-  single_nat_gateway  = var.environment != "production" # Cost optimization for dev/staging
+  enable_nat_gateway  = false  # COST-OPTIMIZATION: No NAT Gateway, use public subnets (saves $32/month)
+  single_nat_gateway  = false
   enable_vpn_gateway  = false
 
   tags = local.common_tags
@@ -182,8 +182,7 @@ module "ecs" {
 
   name_prefix            = local.name_prefix
   vpc_id                 = module.vpc.vpc_id
-  public_subnet_ids      = module.vpc.public_subnet_ids
-  private_app_subnet_ids = module.vpc.private_app_subnet_ids  # ECS tasks run in private subnets
+  public_subnet_ids      = module.vpc.public_subnet_ids  # COST-OPTIMIZATION: Tasks in public subnets with public IPs
   ecs_security_group_id  = module.security_groups.ecs_security_group_id
   alb_target_group_arns  = module.alb.target_group_arns
   alb_dns_name           = module.alb.alb_dns_name
@@ -194,6 +193,11 @@ module "ecs" {
   rds_endpoint           = module.rds.endpoint
   rds_password           = var.rds_master_password
   sqs_queue_url          = module.sqs.queue_url  # COST-OPTIMIZATION: SQS instead of RabbitMQ
+
+  # Multi-container task configuration (like docker-compose)
+  use_multi_container_task = true
+  task_cpu                 = var.environment == "production" ? "2048" : "1024"  # 2 vCPU for prod, 1 vCPU for dev
+  task_memory              = var.environment == "production" ? "4096" : "2048"  # 4GB for prod, 2GB for dev
 
   tags = local.common_tags
 }
@@ -312,18 +316,18 @@ module "monitoring" {
   common_tags        = local.common_tags
 }
 
-# Auto Scaling
+# Auto Scaling - scale the single multi-container task
 module "autoscaling" {
   source = "./modules/autoscaling"
 
   name_prefix       = local.name_prefix
   ecs_cluster_name  = module.ecs.cluster_name
-  services          = local.services
+  services          = { "app" = { name = "app", port = 8080, cpu = 1024, memory = 2048, desired_count = 1, health_check = "/health", use_alb = true } }
   ecs_service_names = module.ecs.service_ids
 
-  # Scaling configuration
-  min_capacity = var.environment == "production" ? 2 : 1
-  max_capacity = var.environment == "production" ? 20 : 5
+  # Scaling configuration for multi-container task
+  min_capacity = 1  # At least 1 task always running
+  max_capacity = var.environment == "production" ? 4 : 2  # Scale up to 4 tasks in production
 
   tags = local.common_tags
 }

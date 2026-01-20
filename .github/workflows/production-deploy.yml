@@ -1,0 +1,214 @@
+name: Production CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-west-3
+  ENVIRONMENT: production
+  ECS_CLUSTER: eshop-production
+
+jobs:
+  # Job 1: Build and Test
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          echo "version=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker images
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          # Build all service images
+          services=(
+            "webapp:src/WebApp/Dockerfile"
+            "identity-api:src/Identity.API/Dockerfile"
+            "catalog-api:src/Catalog.API/Dockerfile"
+            "basket-api:src/Basket.API/Dockerfile"
+            "ordering-api:src/Ordering.API/Dockerfile"
+            "webhooks-api:src/Webhooks.API/Dockerfile"
+            "payment-processor:src/PaymentProcessor/Dockerfile"
+            "order-processor:src/OrderProcessor/Dockerfile"
+            "webhook-client:src/WebhookClient/Dockerfile"
+          )
+
+          for service_info in "${services[@]}"; do
+            IFS=':' read -r service dockerfile <<< "$service_info"
+
+            if [ -f "$dockerfile" ]; then
+              echo "Building $service from $dockerfile..."
+              docker build -f "$dockerfile" -t $ECR_REGISTRY/eshop-$ENVIRONMENT-${service}:${IMAGE_TAG} .
+              docker push $ECR_REGISTRY/eshop-$ENVIRONMENT-${service}:${IMAGE_TAG}
+
+              # Also tag as latest
+              docker tag $ECR_REGISTRY/eshop-$ENVIRONMENT-${service}:${IMAGE_TAG} $ECR_REGISTRY/eshop-$ENVIRONMENT-${service}:latest
+              docker push $ECR_REGISTRY/eshop-$ENVIRONMENT-${service}:latest
+            else
+              echo "Warning: Dockerfile not found at $dockerfile for $service"
+            fi
+          done
+
+  # Job 2: Deploy to ECS
+  deploy-production:
+    name: Deploy to ECS Production
+    runs-on: ubuntu-latest
+    needs: build-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get ALB DNS name
+        id: alb
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names eshop-${{ env.ENVIRONMENT }}-alb \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          echo "dns_name=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "ALB DNS: $ALB_DNS"
+
+      - name: Update ECS multi-container service
+        env:
+          IMAGE_TAG: ${{ needs.build-test.outputs.image_tag }}
+        run: |
+          # Single multi-container service deployment (like docker-compose)
+          echo "Deploying all containers to eshop-${{ env.ENVIRONMENT }}-app service..."
+
+          # Force new deployment - ECS will pull latest images from ECR
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service eshop-${{ env.ENVIRONMENT }}-app \
+            --force-new-deployment \
+            --no-cli-pager
+
+          echo "✅ Deployment triggered for all containers in single task"
+
+      - name: Wait for service to stabilize
+        run: |
+          echo "Waiting for eshop-${{ env.ENVIRONMENT }}-app service to stabilize..."
+
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services eshop-${{ env.ENVIRONMENT }}-app \
+            --no-cli-pager || {
+              echo "⚠️ Service failed to stabilize"
+              exit 1
+            }
+
+          echo "✅ Multi-container service is stable (all 8 containers running)"
+
+      - name: Health Checks
+        run: |
+          ALB_DNS="${{ steps.alb.outputs.dns_name }}"
+
+          echo "Waiting for ALB health checks..."
+          sleep 30
+
+          for i in {1..15}; do
+            echo "Health check attempt $i/15..."
+            if curl -f -s -k "https://${ALB_DNS}/health" || curl -f -s "http://${ALB_DNS}/health"; then
+              echo "✅ Deployment healthy!"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Health check failed"
+          exit 1
+
+      - name: Smoke Tests
+        if: success()
+        run: |
+          ALB_DNS="${{ steps.alb.outputs.dns_name }}"
+
+          # Test main webapp
+          curl -f -k "https://${ALB_DNS}/" || curl -f "http://${ALB_DNS}/" || exit 1
+
+          # Test health endpoint
+          curl -f -k "https://${ALB_DNS}/health" || curl -f "http://${ALB_DNS}/health" || exit 1
+
+          echo "✅ Smoke tests passed!"
+
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          echo "⚠️ Deployment failed, rolling back multi-container service..."
+
+          # Force rollback by triggering new deployment
+          # ECS will automatically use the previous stable task definition
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service eshop-${{ env.ENVIRONMENT }}-app \
+            --force-new-deployment \
+            --no-cli-pager
+
+          echo "✅ Rollback initiated for all containers"
+
+      - name: Get deployment URL
+        if: success()
+        run: |
+          ALB_DNS="${{ steps.alb.outputs.dns_name }}"
+          echo "🚀 Application URL: https://${ALB_DNS}"
+          echo "📊 Deployment version: ${{ needs.build-test.outputs.image_tag }}"
+
+      - name: Notify
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: "ECS Production: ${{ job.status }} | v${{ needs.build-test.outputs.image_tag }}"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true

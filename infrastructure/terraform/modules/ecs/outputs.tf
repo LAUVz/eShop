@@ -6,10 +6,18 @@ output "cluster_arn" {
   value = aws_ecs_cluster.main.arn
 }
 
-output "service_names" {
-  value = [for v in aws_ecs_service.service : v.name]
+output "service_name" {
+  value = aws_ecs_service.app.name
+  description = "Name of the multi-container ECS service"
 }
 
+output "service_id" {
+  value = aws_ecs_service.app.id
+  description = "ID of the multi-container ECS service"
+}
+
+# For compatibility with autoscaling module
 output "service_ids" {
-  value = { for k, v in aws_ecs_service.service : k => v.id }
+  value = { "app" = aws_ecs_service.app.id }
+  description = "Service IDs map (single multi-container service)"
 }

@@ -7,12 +7,8 @@ variable "vpc_id" {
 }
 
 variable "public_subnet_ids" {
-  type = list(string)
-}
-
-variable "private_app_subnet_ids" {
   type        = list(string)
-  description = "Private subnet IDs for ECS tasks"
+  description = "Public subnet IDs for ECS tasks (no NAT Gateway needed)"
 }
 
 variable "ecs_security_group_id" {
@@ -58,6 +54,24 @@ variable "rds_password" {
 
 variable "sqs_queue_url" {
   type = string
+}
+
+variable "use_multi_container_task" {
+  type        = bool
+  description = "Use single multi-container task instead of separate tasks per service (like docker-compose)"
+  default     = true
+}
+
+variable "task_cpu" {
+  type        = string
+  description = "Total CPU for multi-container task (1024 = 1 vCPU, 2048 = 2 vCPU)"
+  default     = "1024"
+}
+
+variable "task_memory" {
+  type        = string
+  description = "Total memory for multi-container task in MB"
+  default     = "2048"
 }
 
 variable "tags" {

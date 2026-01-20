@@ -392,29 +392,39 @@ function Set-Parameters {
 }
 
 function New-ConfigFiles {
+    # Production backend config
     $backendConfig = @"
 bucket         = "$BUCKET_NAME"
-key            = "eshop/dev/terraform.tfstate"
+key            = "eshop/production/terraform.tfstate"
 region         = "$AWS_REGION"
 encrypt        = true
 dynamodb_table = "eshop-terraform-locks"
 "@
 
-    $backendConfig | Out-File -FilePath "..\terraform\terraform-backend.tfvars" -Encoding utf8
+    $backendConfig | Out-File -FilePath "..\terraform\backend-production.hcl" -Encoding utf8
 
+    # Production terraform variables
     $tfVars = @"
+# AWS Configuration
 aws_region         = "$AWS_REGION"
-environment        = "dev"
+environment        = "production"
+
+# Network Configuration
 vpc_cidr           = "10.0.0.0/16"
 availability_zones = ["${AWS_REGION}a", "${AWS_REGION}b"]
 
+# Database Configuration
 rds_master_password = "$DB_PASSWORD"
-jwt_secret_key      = "$JWT_SECRET"
 
+# RabbitMQ Configuration (using SQS for cost optimization)
+rabbitmq_username = "admin"
+rabbitmq_password = "$DB_PASSWORD"
+
+# JWT Configuration
+jwt_secret_key = "$JWT_SECRET"
+
+# Monitoring
 alert_email = "$ALERT_EMAIL"
-
-enable_cost_optimization = true
-use_single_nat_gateway   = true
 "@
 
     $tfVars | Out-File -FilePath "..\terraform\terraform.tfvars" -Encoding utf8
@@ -432,36 +442,66 @@ AWS_REGION = $AWS_REGION
     $githubSecrets | Out-File -FilePath "github-secrets.txt" -Encoding utf8
 
     $summary = @"
-eShop AWS Setup Summary
+========================================
+eShop AWS Setup Summary - COST-OPTIMIZED
+========================================
 
 Account ID: $AWS_ACCOUNT_ID
 Region: $AWS_REGION
 Terraform State Bucket: $BUCKET_NAME
 GitHub Actions Role: $GITHUB_ROLE_ARN
 
+COST OPTIMIZATION APPLIED:
+- Multi-container ECS task (all services in ONE task)
+- No NAT Gateway (public subnets + security groups)
+- FARGATE_SPOT enabled (70% compute discount)
+- Expected cost: `$46-56/month (vs `$113/month traditional)
+
 Next Steps:
 1. Check email ($ALERT_EMAIL) to confirm SNS subscription
-2. Add GitHub secrets (see github-secrets.txt)
-3. Deploy infrastructure:
+
+2. Add GitHub secrets:
+   Settings -> Secrets and variables -> Actions
+   - AWS_ROLE_ARN (from github-secrets.txt)
+   - AWS_REGION (from github-secrets.txt)
+
+3. Deploy infrastructure with Terraform:
    cd ..\terraform
-   terraform init -backend-config=\"terraform-backend.tfvars\"
-   terraform plan
-   terraform apply
+   terraform init -backend-config=backend-production.hcl
+   terraform plan -out=production.tfplan
+   terraform apply production.tfplan
+
+4. Deploy application:
+   git push origin main
 
 Security Notes:
-terraform.tfvars contains secrets - DO NOT commit to Git
-Database password and JWT secret stored in Parameter Store
-GitHub Actions uses OIDC (no long-lived credentials)
+✓ terraform.tfvars contains secrets - DO NOT commit to Git
+✓ Database password and JWT secret stored in Parameter Store
+✓ GitHub Actions uses OIDC (no long-lived AWS credentials)
+✓ ECS tasks in public subnets protected by security groups
+✓ RDS in private subnets (no internet access)
 
 Cost Monitoring:
-Budget alerts at 50%, 80%, 100% of `$100/month
-Alerts sent to: $ALERT_EMAIL
+✓ Budget alerts at 50%, 80%, 100% of `$100/month
+✓ Alerts sent to: $ALERT_EMAIL
+✓ Monitor in AWS Cost Explorer after 24 hours
 
 Files Created:
-terraform-backend.tfvars
-terraform.tfvars
-github-secrets.txt
-setup-summary.txt
+- backend-production.hcl (Terraform backend config)
+- terraform.tfvars (Infrastructure variables - CONTAINS SECRETS!)
+- github-secrets.txt (Secrets for GitHub Actions)
+- setup-summary.txt (This file)
+
+Architecture:
+- VPC with public/private subnets (NO NAT Gateway)
+- ECS Fargate with multi-container task (8 services in 1 task)
+- RDS PostgreSQL (db.t4g.micro)
+- Application Load Balancer (HTTPS)
+- Amazon SQS (replaces RabbitMQ)
+- CloudWatch monitoring
+
+Read DEPLOYMENT-READY.md for complete deployment guide!
+========================================
 "@
 
     $summary | Out-File -FilePath "setup-summary.txt" -Encoding utf8

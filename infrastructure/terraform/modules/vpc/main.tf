@@ -74,9 +74,9 @@ resource "aws_subnet" "private_data" {
   )
 }
 
-# Elastic IPs for NAT Gateways
+# Elastic IPs for NAT Gateways (only if NAT Gateway is enabled)
 resource "aws_eip" "nat" {
-  count  = var.single_nat_gateway ? 1 : length(var.availability_zones)
+  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.availability_zones)) : 0
   domain = "vpc"
 
   tags = merge(
@@ -123,8 +123,9 @@ resource "aws_route_table" "public" {
   )
 }
 
+# COST-OPTIMIZATION: Only create private route tables if NAT Gateway is enabled
 resource "aws_route_table" "private" {
-  count  = var.single_nat_gateway ? 1 : length(var.availability_zones)
+  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.availability_zones)) : 0
   vpc_id = aws_vpc.main.id
 
   route {
@@ -148,14 +149,16 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# COST-OPTIMIZATION: Only associate private subnets with route tables if NAT Gateway is enabled
+# Otherwise, private subnets will have no route to internet (which is fine for data tier)
 resource "aws_route_table_association" "private_app" {
-  count          = length(aws_subnet.private_app)
+  count          = var.enable_nat_gateway ? length(aws_subnet.private_app) : 0
   subnet_id      = aws_subnet.private_app[count.index].id
   route_table_id = aws_route_table.private[var.single_nat_gateway ? 0 : count.index].id
 }
 
 resource "aws_route_table_association" "private_data" {
-  count          = length(aws_subnet.private_data)
+  count          = var.enable_nat_gateway ? length(aws_subnet.private_data) : 0
   subnet_id      = aws_subnet.private_data[count.index].id
   route_table_id = aws_route_table.private[var.single_nat_gateway ? 0 : count.index].id
 }
