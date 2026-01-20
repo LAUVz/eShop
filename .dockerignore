@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.azdo
+
+# IDE
+.vs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts
+**/bin
+**/obj
+**/out
+**/.next
+**/dist
+**/build
+
+# Dependencies
+**/node_modules
+**/packages
+
+# Test results
+**/TestResults
+**/*.trx
+
+# Documentation
+*.md
+docs/
+LICENSE
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Configuration
+.env
+.env.*
+*.user
+*.suo
+
+# Logs
+**/logs
+**/*.log
+
+# Deployment
+deployment/
+infrastructure/
+scripts/
+
+# Temp files
+**/tmp
+**/temp
+**/.tmp
