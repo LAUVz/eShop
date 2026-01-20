@@ -1,17 +1,28 @@
-﻿FROM mcr.microsoft.com/dotnet/nightly/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy ALL source first to avoid missing project references
+# Copy Directory.*.props files for central package management
+COPY ["Directory.Build.props", "./"]
+
+# Copy solution and project files
+COPY ["src/Identity.API/Identity.API.csproj", "src/Identity.API/"]
+COPY ["src/eShop.ServiceDefaults/eShop.ServiceDefaults.csproj", "src/eShop.ServiceDefaults/"]
+
+# Restore dependencies
+RUN dotnet restore "src/Identity.API/Identity.API.csproj"
+
+# Copy source code
 COPY . .
 
-# Restore and build
+# Build and publish
 WORKDIR "/src/src/Identity.API"
-RUN dotnet restore "Identity.API.csproj"
-RUN dotnet publish "Identity.API.csproj" -c Release -o /app/publish /p:GenerateDocumentationFile=false
+RUN dotnet build "Identity.API.csproj" -c Release -o /app/build
+RUN dotnet publish "Identity.API.csproj" -c Release -o /app/publish --no-restore
 
 # Runtime
-FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 EXPOSE 8081
 COPY --from=build /app/publish .
+ENV ASPNETCORE_URLS=http://+:8081
 ENTRYPOINT ["dotnet", "Identity.API.dll"]
