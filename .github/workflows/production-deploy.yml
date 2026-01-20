@@ -78,7 +78,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.meta.outputs.version }}
         run: |
-          # Build all service images
+          # Build all service images (8 services matching Terraform ECS configuration)
           services=(
             "webapp:src/WebApp/Dockerfile"
             "identity-api:src/Identity.API/Dockerfile"
@@ -88,7 +88,6 @@ jobs:
             "webhooks-api:src/Webhooks.API/Dockerfile"
             "payment-processor:src/PaymentProcessor/Dockerfile"
             "order-processor:src/OrderProcessor/Dockerfile"
-            "webhook-client:src/WebhookClient/Dockerfile"
           )
 
           for service_info in "${services[@]}"; do
