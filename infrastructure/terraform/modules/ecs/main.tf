@@ -2,6 +2,9 @@
 # This runs all services in ONE ECS task (like docker-compose)
 # Saves ~$20/month on compute costs
 
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 locals {
   # Parse RDS endpoint to get host and port
   rds_parts = split(":", var.rds_endpoint)
@@ -17,13 +20,16 @@ locals {
   # Identity Server URL
   identity_url = local.base_url
 
+  # ECR repository URLs for container images
+  ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com"
+
   # Build container definitions for multi-container task
   # All containers run in the same task, can communicate via localhost
   container_definitions = [
     # WebApp - main UI (port 8080)
     {
       name   = "webapp"
-      image  = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder
+      image  = "${local.ecr_registry}/${var.name_prefix}-webapp:latest"
       cpu    = 256  # 0.25 vCPU
       memory = 512  # 512 MB
       portMappings = [{
@@ -54,7 +60,7 @@ locals {
     # Identity API - authentication (port 8081)
     {
       name   = "identity-api"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-identity-api:latest"
       cpu    = 256  # 0.25 vCPU
       memory = 512  # 512 MB
       portMappings = [{
@@ -86,7 +92,7 @@ locals {
     # Catalog API - product catalog (port 8082)
     {
       name   = "catalog-api"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-catalog-api:latest"
       cpu    = 256  # 0.25 vCPU
       memory = 512  # 512 MB
       portMappings = [{
@@ -113,7 +119,7 @@ locals {
     # Basket API - shopping cart (port 8083)
     {
       name   = "basket-api"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-basket-api:latest"
       cpu    = 256  # 0.25 vCPU
       memory = 512  # 512 MB
       portMappings = [{
@@ -140,7 +146,7 @@ locals {
     # Ordering API - order management (port 8084)
     {
       name   = "ordering-api"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-ordering-api:latest"
       cpu    = 256  # 0.25 vCPU
       memory = 512  # 512 MB
       portMappings = [{
@@ -168,7 +174,7 @@ locals {
     # Webhooks API - webhook management (port 8085)
     {
       name   = "webhooks-api"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-webhooks-api:latest"
       cpu    = 128  # 0.125 vCPU (smaller, not web-facing)
       memory = 256  # 256 MB
       portMappings = [{
@@ -196,7 +202,7 @@ locals {
     # Payment Processor - background worker (port 8086)
     {
       name   = "payment-processor"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-payment-processor:latest"
       cpu    = 128  # 0.125 vCPU (background worker)
       memory = 256  # 256 MB
       portMappings = [{
@@ -222,7 +228,7 @@ locals {
     # Order Processor - background worker (port 8087)
     {
       name   = "order-processor"
-      image  = "public.ecr.aws/docker/library/httpd:latest"
+      image  = "${local.ecr_registry}/${var.name_prefix}-order-processor:latest"
       cpu    = 128  # 0.125 vCPU (background worker)
       memory = 256  # 256 MB
       portMappings = [{
@@ -410,5 +416,3 @@ resource "aws_iam_role_policy" "ecs_task_sqs" {
     ]
   })
 }
-
-data "aws_region" "current" {}
