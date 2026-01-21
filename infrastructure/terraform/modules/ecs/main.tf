@@ -22,8 +22,10 @@ locals {
   container_definitions = [
     # WebApp - main UI (port 8080)
     {
-      name  = "webapp"
-      image = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder
+      name   = "webapp"
+      image  = "public.ecr.aws/docker/library/httpd:latest"  # Placeholder
+      cpu    = 256  # 0.25 vCPU
+      memory = 512  # 512 MB
       portMappings = [{
         containerPort = 8080
         hostPort      = 8080
@@ -51,8 +53,10 @@ locals {
 
     # Identity API - authentication (port 8081)
     {
-      name  = "identity-api"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "identity-api"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 256  # 0.25 vCPU
+      memory = 512  # 512 MB
       portMappings = [{
         containerPort = 8081
         hostPort      = 8081
@@ -81,8 +85,10 @@ locals {
 
     # Catalog API - product catalog (port 8082)
     {
-      name  = "catalog-api"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "catalog-api"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 256  # 0.25 vCPU
+      memory = 512  # 512 MB
       portMappings = [{
         containerPort = 8082
         hostPort      = 8082
@@ -106,8 +112,10 @@ locals {
 
     # Basket API - shopping cart (port 8083)
     {
-      name  = "basket-api"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "basket-api"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 256  # 0.25 vCPU
+      memory = 512  # 512 MB
       portMappings = [{
         containerPort = 8083
         hostPort      = 8083
@@ -131,8 +139,10 @@ locals {
 
     # Ordering API - order management (port 8084)
     {
-      name  = "ordering-api"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "ordering-api"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 256  # 0.25 vCPU
+      memory = 512  # 512 MB
       portMappings = [{
         containerPort = 8084
         hostPort      = 8084
@@ -157,8 +167,10 @@ locals {
 
     # Webhooks API - webhook management (port 8085)
     {
-      name  = "webhooks-api"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "webhooks-api"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 128  # 0.125 vCPU (smaller, not web-facing)
+      memory = 256  # 256 MB
       portMappings = [{
         containerPort = 8085
         hostPort      = 8085
@@ -183,8 +195,10 @@ locals {
 
     # Payment Processor - background worker (port 8086)
     {
-      name  = "payment-processor"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "payment-processor"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 128  # 0.125 vCPU (background worker)
+      memory = 256  # 256 MB
       portMappings = [{
         containerPort = 8086
         hostPort      = 8086
@@ -207,8 +221,10 @@ locals {
 
     # Order Processor - background worker (port 8087)
     {
-      name  = "order-processor"
-      image = "public.ecr.aws/docker/library/httpd:latest"
+      name   = "order-processor"
+      image  = "public.ecr.aws/docker/library/httpd:latest"
+      cpu    = 128  # 0.125 vCPU (background worker)
+      memory = 256  # 256 MB
       portMappings = [{
         containerPort = 8087
         hostPort      = 8087
