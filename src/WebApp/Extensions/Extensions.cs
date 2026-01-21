@@ -68,7 +68,12 @@ public static class Extensions
             options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
         })
-        .AddCookie(options => options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionCookieLifetime))
+        .AddCookie(options =>
+        {
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionCookieLifetime);
+            // Allow cookies over HTTP when behind load balancer
+            options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+        })
         .AddOpenIdConnect(options =>
         {
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -84,6 +89,9 @@ public static class Extensions
             options.Scope.Add("profile");
             options.Scope.Add("orders");
             options.Scope.Add("basket");
+            // Configure OpenIdConnect cookies for HTTP
+            options.NonceCookie.SecurePolicy = CookieSecurePolicy.None;
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.None;
         });
 
         // Blazor auth services

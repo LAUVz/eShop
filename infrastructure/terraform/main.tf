@@ -46,7 +46,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = true
     }
     identity-api = {
@@ -55,7 +55,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = true
     }
     catalog-api = {
@@ -64,7 +64,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = true
     }
     basket-api = {
@@ -73,7 +73,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = true
     }
     ordering-api = {
@@ -82,7 +82,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = true
     }
     webhooks-api = {
@@ -91,7 +91,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = var.environment == "production" ? 2 : 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = true
     }
   }
@@ -104,7 +104,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = false
     }
     order-processor = {
@@ -113,7 +113,7 @@ locals {
       cpu           = 256
       memory        = 512
       desired_count = 1
-      health_check  = "/health"
+      health_check  = "/"
       use_alb       = false
     }
   }
@@ -322,7 +322,7 @@ module "autoscaling" {
 
   name_prefix       = local.name_prefix
   ecs_cluster_name  = module.ecs.cluster_name
-  services          = { "app" = { name = "app", port = 8080, cpu = 1024, memory = 2048, desired_count = 1, health_check = "/health", use_alb = true } }
+  services          = { "app" = { name = "app", port = 8080, cpu = 1024, memory = 2048, desired_count = 1, health_check = "/", use_alb = true } }
   ecs_service_names = module.ecs.service_ids
 
   # Scaling configuration for multi-container task

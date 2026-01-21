@@ -39,6 +39,7 @@ locals {
       }]
       environment = [
         { name = "ASPNETCORE_URLS", value = "http://+:8080" },
+        { name = "ASPNETCORE_FORWARDEDHEADERS_ENABLED", value = "true" },
         { name = "IdentityUrl", value = "http://localhost:8081" },  # Via localhost!
         { name = "CallBackUrl", value = local.base_url },
         { name = "services__catalog-api__http__0", value = "http://localhost:8082" },
