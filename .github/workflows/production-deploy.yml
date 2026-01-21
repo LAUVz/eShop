@@ -245,27 +245,57 @@ jobs:
               --service-name eshop-${{ env.ENVIRONMENT }}-app \
               --desired-status STOPPED \
               --query 'taskArns | length(@)' \
-              --output text)
+              --output text 2>/dev/null || echo "0")
 
-            if [ "$FAILED_TASKS" -gt 5 ]; then
+            if [ "$FAILED_TASKS" -gt 3 ]; then
               echo "❌ Too many failed tasks ($FAILED_TASKS). Deployment likely failing."
               echo ""
-              echo "🔍 Checking stopped task details..."
-              STOPPED_TASK_ARN=$(aws ecs list-tasks \
+              echo "🔍 Fetching last 3 stopped tasks..."
+
+              STOPPED_TASK_ARNS=$(aws ecs list-tasks \
                 --cluster ${{ env.ECS_CLUSTER }} \
                 --service-name eshop-${{ env.ENVIRONMENT }}-app \
                 --desired-status STOPPED \
-                --max-items 1 \
-                --query 'taskArns[0]' \
-                --output text)
+                --max-items 3 \
+                --query 'taskArns[]' \
+                --output text 2>/dev/null)
 
-              if [ -n "$STOPPED_TASK_ARN" ]; then
-                aws ecs describe-tasks \
-                  --cluster ${{ env.ECS_CLUSTER }} \
-                  --tasks "$STOPPED_TASK_ARN" \
-                  --query 'tasks[0].[stoppedReason,containers[].reason]' \
-                  --output text
+              if [ -n "$STOPPED_TASK_ARNS" ]; then
+                for TASK_ARN in $STOPPED_TASK_ARNS; do
+                  TASK_ID=$(basename "$TASK_ARN")
+                  echo ""
+                  echo "📋 Stopped Task: $TASK_ID"
+
+                  STOPPED_TASK_INFO=$(aws ecs describe-tasks \
+                    --cluster ${{ env.ECS_CLUSTER }} \
+                    --tasks "$TASK_ARN" \
+                    --no-cli-pager 2>/dev/null || echo '{"tasks":[]}')
+
+                  STOPPED_REASON=$(echo "$STOPPED_TASK_INFO" | jq -r '.tasks[0].stoppedReason // "Unknown"')
+                  STOP_CODE=$(echo "$STOPPED_TASK_INFO" | jq -r '.tasks[0].stopCode // "N/A"')
+
+                  echo "   Stopped Reason: $STOPPED_REASON"
+                  echo "   Stop Code: $STOP_CODE"
+
+                  # Show container exit reasons
+                  CONTAINER_COUNT=$(echo "$STOPPED_TASK_INFO" | jq -r '.tasks[0].containers | length // 0')
+                  if [ "$CONTAINER_COUNT" -gt 0 ]; then
+                    echo "   Container Details:"
+                    echo "$STOPPED_TASK_INFO" | jq -r '.tasks[0].containers[]? | "      \(.name): \(.reason // .lastStatus)"'
+                  fi
+                done
               fi
+
+              echo ""
+              echo "💡 Common causes:"
+              echo "   - Missing or invalid environment variables"
+              echo "   - Database connection issues (RDS not accessible)"
+              echo "   - Container image pull failures"
+              echo "   - Insufficient CPU/memory allocation"
+              echo "   - Application startup errors"
+              echo ""
+              echo "🔗 Check CloudWatch Logs:"
+              echo "   https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group/\$252Fecs\$252Feshop-${{ env.ENVIRONMENT }}-app"
               exit 1
             fi
 
